@@ -63,9 +63,16 @@ def landlock_abi_version(syscall_fn=None) -> int | None:
     return rc if rc and rc > 0 else None
 
 
-def detect_openshell(exists=os.path.exists) -> bool:
-    """Heuristic: OpenShell mounts its config/policy dir into every sandbox."""
-    return bool(exists("/etc/openshell"))
+def detect_openshell(environ=os.environ, exists=os.path.exists) -> bool:
+    """Detect execution inside an OpenShell sandbox.
+
+    Markers observed in v0.1.5: the OPENSHELL_SANDBOX env var and the
+    supervisor CA material dir. /etc/openshell kept as a fallback for
+    images that bake a policy there.
+    """
+    if environ.get("OPENSHELL_SANDBOX"):
+        return True
+    return bool(exists("/run/openshell-supervisor-ca") or exists("/etc/openshell"))
 
 
 def decode_capabilities(mask: int) -> list[str]:

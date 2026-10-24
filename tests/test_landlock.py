@@ -18,12 +18,24 @@ def test_landlock_abi_none_when_syscall_missing():
     assert landlock_abi_version(syscall_fn=fake_syscall) is None
 
 
+def test_detect_openshell_by_env_marker():
+    # real marker observed inside a v0.1.5 sandbox
+    assert detect_openshell(environ={"OPENSHELL_SANDBOX": "1"}, exists=lambda p: False) is True
+
+
+def test_detect_openshell_by_supervisor_ca_dir():
+    assert (
+        detect_openshell(environ={}, exists=lambda p: p == "/run/openshell-supervisor-ca")
+        is True
+    )
+
+
 def test_detect_openshell_by_policy_dir():
-    assert detect_openshell(exists=lambda p: p == "/etc/openshell") is True
+    assert detect_openshell(environ={}, exists=lambda p: p == "/etc/openshell") is True
 
 
 def test_detect_openshell_absent_on_plain_host():
-    assert detect_openshell(exists=lambda p: False) is False
+    assert detect_openshell(environ={}, exists=lambda p: False) is False
 
 
 def test_gather_includes_openshell_relevant_fields():
