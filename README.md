@@ -50,6 +50,24 @@ mise run start:web      # web dashboard on :8000
 
 The [Dockerfile](Dockerfile) is multi-stage and built **strictly on SUSE Base Container Images** (`registry.suse.com/bci/python:3.13`).
 
+**Official images** live on GHCR, built by [`.github/workflows/container.yml`](.github/workflows/container.yml)
+(the test suite gates the image build; multi-arch `linux/amd64` + `linux/arm64`):
+
+```bash
+podman pull ghcr.io/wiredquill/can-i:latest
+podman run --rm -p 8000:8000 ghcr.io/wiredquill/can-i:latest
+```
+
+**Local dev loop** — build on your box (fastest) and share via the LAN registry:
+
+```bash
+mise run build:local        # podman build -t reg.wiredquill.com/repo/can-i:dev -t can-i:dev .
+mise run run:local          # web dashboard on :8000 from the local image
+mise run push:local         # push to reg.wiredquill.com (podman login first)
+```
+
+Direct podman, no mise:
+
 ```bash
 podman build -t can-i .
 podman run --rm -p 8000:8000 can-i                      # web dashboard

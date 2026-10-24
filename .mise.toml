@@ -28,6 +28,18 @@ run = "RUN_CONTAINER_TESTS=1 .venv/bin/python -m pytest tests/ -q -m container"
 description = "Start the web dashboard on :8000 (alias for start:web)"
 run = "mise run start:web"
 
+[tasks."build:local"]
+description = "Build the BCI image locally (fast dev loop) tagged for the LAN registry"
+run = "podman build -t reg.wiredquill.com/repo/can-i:dev -t can-i:dev ."
+
+[tasks."push:local"]
+description = "Push the dev image to the local registry (podman login reg.wiredquill.com first)"
+run = "podman push reg.wiredquill.com/repo/can-i:dev"
+
+[tasks."run:local"]
+description = "Run the locally built dev image (web dashboard on :8000)"
+run = "podman run --rm -p ${CAN_I_PORT:-8000}:8000 can-i:dev"
+
 [tasks."start:tui"]
 description = "Start the terminal UI"
 run = ".venv/bin/can-i tui"
