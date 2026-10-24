@@ -1,0 +1,20 @@
+{
+  "source": "manual",
+  "recipe": {
+    "name": "can-i (FastAPI + Textual)",
+    "kind": "fastapi",
+    "bootstrap": [
+      "cd /data/can-i && uv venv .venv --python 3.13 && uv pip install --python .venv/bin/python -e '.[dev]'"
+    ],
+    "build": [],
+    "test": [
+      "cd /data/can-i && env -u PYTHONPATH -u VIRTUAL_ENV .venv/bin/python -m pytest tests/ -q"
+    ],
+    "start": "cd /data/can-i && env -u PYTHONPATH -u VIRTUAL_ENV .venv/bin/python -m cani web --host 0.0.0.0 --port 8377",
+    "port": 8377,
+    "readinessPath": "/api/system",
+    "evidence": [
+      "Manual manifest: auto-detection assumed bare pytest and uvicorn main:app"
+    ]
+  }
+}
