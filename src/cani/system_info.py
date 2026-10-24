@@ -32,9 +32,40 @@ class SystemInfo(BaseModel):
     user: str
     capabilities: list[str]
     container_runtime: str | None = None
-    apparmor: str = "unknown"
+    apparmor: str = "unknown"  # host LSM; OpenShell itself uses Landlock, not AppArmor
     seccomp: str = "unknown"
+    landlock_abi: int | None = None  # Landlock ABI version, None if unsupported
+    openshell: bool = False  # running inside an OpenShell sandbox
     sandboxed: bool = False
+
+
+# landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION) returns the
+# highest supported Landlock ABI version, or -1/ENOSYS where unsupported.
+# Syscall number is 444 on both x86_64 and aarch64.
+_LANDLOCK_SYSCALL_NR = 444
+_LANDLOCK_CREATE_RULESET_VERSION = 1
+
+
+def landlock_abi_version(syscall_fn=None) -> int | None:
+    """Return the kernel's Landlock ABI version, or None if unsupported."""
+    if syscall_fn is None:
+        import ctypes
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.syscall.restype = ctypes.c_long
+
+        def syscall_fn(nr, *args):  # noqa: ANN001
+            return libc.syscall(ctypes.c_long(nr), *args)
+
+    rc = syscall_fn(
+        _LANDLOCK_SYSCALL_NR, None, 0, _LANDLOCK_CREATE_RULESET_VERSION
+    )
+    return rc if rc and rc > 0 else None
+
+
+def detect_openshell(exists=os.path.exists) -> bool:
+    """Heuristic: OpenShell mounts its config/policy dir into every sandbox."""
+    return bool(exists("/etc/openshell"))
 
 
 def decode_capabilities(mask: int) -> list[str]:
@@ -100,8 +131,10 @@ def gather() -> SystemInfo:
     seccomp = parse_seccomp_mode(int(seccomp_raw)) if seccomp_raw.isdigit() else "unknown"
     runtime = detect_container()
     apparmor = _apparmor_profile()
+    openshell = detect_openshell()
     sandboxed = (
-        runtime is not None
+        openshell
+        or runtime is not None
         or seccomp == "filter"
         or (apparmor not in ("unconfined", "unknown"))
     )
@@ -114,5 +147,7 @@ def gather() -> SystemInfo:
         container_runtime=runtime,
         apparmor=apparmor,
         seccomp=seccomp,
+        landlock_abi=landlock_abi_version(),
+        openshell=openshell,
         sandboxed=sandboxed,
     )

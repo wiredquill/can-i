@@ -137,10 +137,12 @@ function renderRibbon(sys) {
     ["Host", sys.hostname], ["Kernel", sys.kernel],
     ["User", `${sys.user} (uid ${sys.uid})`],
     ["Capabilities", caps || "none"],
-    ["Container", sys.container_runtime || "bare metal / host"],
-    ["AppArmor", sys.apparmor], ["seccomp", sys.seccomp],
+    ["OpenShell", sys.openshell ? "YES" : "no"],
+    ["Runtime", sys.container_runtime || "host"],
+    ["Landlock", sys.landlock_abi ? `ABI v${sys.landlock_abi}` : "unsupported"],
+    ["seccomp", sys.seccomp],
   ].map(([k, v]) => {
-    const warn = (k === "AppArmor" && v !== "unconfined") || (k === "seccomp" && v === "filter") || (k === "Container" && !v.startsWith("bare"));
+    const warn = (k === "OpenShell" && v === "YES") || (k === "seccomp" && v === "filter") || (k === "Runtime" && v !== "host") || (k === "Landlock" && v === "unsupported");
     return `<span class="chip${warn ? " warn" : ""}">${k}: <b>${esc(v)}</b></span>`;
   }).join("") +
   `<span class="chip${sys.sandboxed ? " warn" : ""}">Sandboxed: <b>${sys.sandboxed ? "YES" : "no"}</b></span>`;

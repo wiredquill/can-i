@@ -80,11 +80,15 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     console = Console()
     sysinfo = snap["system"]
+    landlock = (
+        f"ABI v{sysinfo['landlock_abi']}" if sysinfo["landlock_abi"] else "unsupported"
+    )
     console.print(
         f"[bold]{sysinfo['hostname']}[/] kernel {sysinfo['kernel']}  "
         f"user {sysinfo['user']} (uid {sysinfo['uid']})  "
-        f"container: {sysinfo['container_runtime'] or 'host'}  "
-        f"apparmor: {sysinfo['apparmor']}  seccomp: {sysinfo['seccomp']}"
+        f"openshell: {'YES' if sysinfo['openshell'] else 'no'}  "
+        f"runtime: {sysinfo['container_runtime'] or 'host'}  "
+        f"landlock: {landlock}  seccomp: {sysinfo['seccomp']}"
     )
     table = Table(show_lines=False)
     for col in ("Status", "Check", "Category", "Exit", "Latency", "Detail"):

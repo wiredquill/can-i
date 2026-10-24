@@ -87,13 +87,22 @@ class CanIApp(App):
         caps = ", ".join(sysinfo["capabilities"][:5])
         if len(sysinfo["capabilities"]) > 5:
             caps += f" +{len(sysinfo['capabilities']) - 5}…"
+        landlock = (
+            f"ABI v{sysinfo['landlock_abi']}"
+            if sysinfo.get("landlock_abi")
+            else "unsupported"
+        )
         ribbon = Text.assemble(
             (" Host ", "bold reverse"),
             f" {sysinfo['hostname']}  ",
             ("Kernel ", "bold"), f"{sysinfo['kernel']}  ",
             ("User ", "bold"), f"{sysinfo['user']} (uid {sysinfo['uid']})  ",
-            ("Container ", "bold"), f"{sysinfo['container_runtime'] or 'host'}  ",
-            ("AppArmor ", "bold"), f"{sysinfo['apparmor']}  ",
+            ("OpenShell ", "bold"),
+            ("YES" if sysinfo["openshell"] else "no",
+             "bold yellow" if sysinfo["openshell"] else "dim"),
+            "  ",
+            ("Runtime ", "bold"), f"{sysinfo['container_runtime'] or 'host'}  ",
+            ("Landlock ", "bold"), f"{landlock}  ",
             ("seccomp ", "bold"), f"{sysinfo['seccomp']}  ",
             ("Sandboxed ", "bold"),
             (str(sysinfo["sandboxed"]), "bold yellow" if sysinfo["sandboxed"] else "green"),
