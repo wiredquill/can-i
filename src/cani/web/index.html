@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>can-i — sandbox capability inspector</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #111823; --panel2: #16202e; --border: #233247;
+    --fg: #dbe4ee; --muted: #8ba0b8; --accent: #30b566;
+    --green: #2fbf71; --red: #e5484d; --amber: #f5a524; --blue: #4c9aff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.5 "Inter", "Segoe UI", system-ui, sans-serif; }
+  header { padding: 14px 22px; display: flex; align-items: center; gap: 14px;
+           border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .5px; }
+  header h1 .q { color: var(--accent); }
+  #conn { margin-left: auto; font-size: 12px; color: var(--muted); }
+  #conn.live { color: var(--green); }
+
+  #ribbon { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 22px;
+            background: var(--panel2); border-bottom: 1px solid var(--border); }
+  .chip { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+          padding: 4px 10px; font-size: 12px; color: var(--muted); }
+  .chip b { color: var(--fg); font-weight: 600; }
+  .chip.warn b { color: var(--amber); }
+
+  #toolbar { display: flex; gap: 10px; padding: 14px 22px; align-items: center; }
+  button { background: var(--accent); color: #04140a; border: 0; border-radius: 6px;
+           padding: 8px 16px; font-weight: 700; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+  button:disabled { opacity: .5; cursor: default; }
+  #statusline { color: var(--muted); font-size: 12px; }
+
+  main { display: grid; grid-template-columns: 1fr; gap: 0; padding: 0 22px 30px; }
+  @media (min-width: 1100px) { main.editing { grid-template-columns: 1fr 460px; gap: 18px; } }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase;
+       letter-spacing: .08em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr.probe { cursor: pointer; }
+  tr.probe:hover { background: var(--panel2); }
+
+  .badge { display: inline-block; min-width: 86px; text-align: center; padding: 3px 10px;
+           border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+  .badge.allowed { background: rgba(47,191,113,.15); color: var(--green); border: 1px solid var(--green); }
+  .badge.denied  { background: rgba(229,72,77,.15);  color: var(--red);   border: 1px solid var(--red); }
+  .badge.error   { background: rgba(245,165,36,.15); color: var(--amber); border: 1px solid var(--amber); }
+  .badge.running { background: rgba(76,154,255,.15); color: var(--blue);  border: 1px solid var(--blue);
+                   animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .cat { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .cmd { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 12px; color: var(--muted); }
+
+  #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 92vw);
+            background: var(--panel); border-left: 1px solid var(--border);
+            transform: translateX(100%); transition: transform .18s ease;
+            padding: 20px; overflow-y: auto; z-index: 10; }
+  #drawer.open { transform: translateX(0); }
+  #drawer h2 { margin-top: 0; font-size: 16px; }
+  #drawer dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 13px; }
+  #drawer dt { color: var(--muted); }
+  #drawer pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+                padding: 10px; font-size: 12px; white-space: pre-wrap; word-break: break-word;
+                max-height: 220px; overflow: auto; }
+
+  #editor { display: none; flex-direction: column; background: var(--panel);
+            border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+            height: fit-content; position: sticky; top: 16px; }
+  main.editing #editor { display: flex; }
+  #editor header { padding: 10px 14px; font-weight: 700; font-size: 13px; }
+  #yaml { width: 100%; height: 480px; background: var(--bg); color: var(--fg);
+          border: 0; border-top: 1px solid var(--border); padding: 12px; resize: vertical;
+          font: 12px/1.5 ui-monospace, "Cascadia Code", monospace; }
+  #editor .row { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
+  #cfgerr { color: var(--red); font-size: 12px; padding: 0 14px 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>can-i<span class="q">?</span> — sandbox capability inspector</h1>
+  <span id="conn">connecting…</span>
+</header>
+
+<div id="ribbon"></div>
+
+<div id="toolbar">
+  <button id="run">▶ Run Probes</button>
+  <button class="ghost" id="toggle-editor">✎ checks.yaml</button>
+  <span id="statusline"></span>
+</div>
+
+<main id="main">
+  <div>
+    <table>
+      <thead><tr>
+        <th>Status</th><th>Check</th><th>Category</th><th>Command</th><th>Expected</th><th>Exit</th><th>Latency</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div id="editor">
+    <header>checks.yaml — live editor</header>
+    <textarea id="yaml" spellcheck="false"></textarea>
+    <div id="cfgerr"></div>
+    <div class="row">
+      <button id="save-cfg">Save &amp; Apply</button>
+      <button class="ghost" id="reload-cfg">Revert</button>
+    </div>
+    <div class="row">
+      <button class="ghost" id="import-policy">⇪ Import OpenShell policy</button>
+      <input type="file" id="policy-file" accept=".yaml,.yml" style="display:none">
+      <button class="ghost" id="export-policy">⇩ Export as policy</button>
+    </div>
+  </div>
+</main>
+
+<aside id="drawer"></aside>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let probes = new Map();   // id -> result object
+let order = [];           // stable display order
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+
+function renderRibbon(sys) {
+  if (!sys) return;
+  const caps = (sys.capabilities || []).slice(0, 6).join(", ") +
+               (sys.capabilities && sys.capabilities.length > 6 ? ` +${sys.capabilities.length - 6}…` : "");
+  $("#ribbon").innerHTML = [
+    ["Host", sys.hostname], ["Kernel", sys.kernel],
+    ["User", `${sys.user} (uid ${sys.uid})`],
+    ["Capabilities", caps || "none"],
+    ["Container", sys.container_runtime || "bare metal / host"],
+    ["AppArmor", sys.apparmor], ["seccomp", sys.seccomp],
+  ].map(([k, v]) => {
+    const warn = (k === "AppArmor" && v !== "unconfined") || (k === "seccomp" && v === "filter") || (k === "Container" && !v.startsWith("bare"));
+    return `<span class="chip${warn ? " warn" : ""}">${k}: <b>${esc(v)}</b></span>`;
+  }).join("") +
+  `<span class="chip${sys.sandboxed ? " warn" : ""}">Sandboxed: <b>${sys.sandboxed ? "YES" : "no"}</b></span>`;
+}
+
+function expectCell(p) {
+  if (!p.expect) return '<span style="color:var(--muted)">—</span>';
+  if (p.status === "running" || p.met === null || p.met === undefined)
+    return `<span style="color:var(--muted)">expect ${p.expect.toUpperCase()}</span>`;
+  return p.met
+    ? `<span style="color:var(--green)">✓ ${p.expect.toUpperCase()}</span>`
+    : `<span style="color:var(--amber);font-weight:800">✗ expected ${p.expect.toUpperCase()}</span>`;
+}
+
+function renderTable() {
+  $("#rows").innerHTML = order.map((id) => {
+    const p = probes.get(id); if (!p) return "";
+    return `<tr class="probe" data-id="${esc(id)}">
+      <td><span class="badge ${p.status}">${p.status.toUpperCase()}</span></td>
+      <td>${esc(p.name)}</td>
+      <td><span class="cat">${esc(p.category)}</span></td>
+      <td><span class="cmd">${esc(p.command || "")}</span></td>
+      <td>${expectCell(p)}</td>
+      <td>${p.exit_code ?? "—"}</td>
+      <td>${p.latency_ms ? Math.round(p.latency_ms) + " ms" : "—"}</td>
+    </tr>`;
+  }).join("");
+  document.querySelectorAll("tr.probe").forEach((tr) =>
+    tr.addEventListener("click", () => openDrawer(tr.dataset.id)));
+}
+
+function openDrawer(id) {
+  const p = probes.get(id); if (!p) return;
+  const d = $("#drawer");
+  d.innerHTML = `<h2>${esc(p.name)} <span class="badge ${p.status}">${p.status.toUpperCase()}</span></h2>
+    <dl>
+      <dt>ID</dt><dd>${esc(p.id)}</dd>
+      <dt>Category</dt><dd>${esc(p.category)}</dd>
+      ${p.expect ? `<dt>Expectation</dt><dd>${p.met === null || p.met === undefined ? "pending" : p.met ? "✓ met" : "✗ NOT met"} (expected ${p.expect.toUpperCase()})</dd>` : ""}
+      <dt>Exit code</dt><dd>${p.exit_code ?? "—"}</dd>
+      <dt>Latency</dt><dd>${p.latency_ms ? Math.round(p.latency_ms) + " ms" : "—"}</dd>
+      ${p.detail ? `<dt>Detail</dt><dd>${esc(p.detail)}</dd>` : ""}
+    </dl>
+    <h4>stdout</h4><pre>${esc(p.stdout || "(empty)")}</pre>
+    <h4>stderr</h4><pre>${esc(p.stderr || "(empty)")}</pre>
+    <button class="ghost" onclick="document.querySelector('#drawer').classList.remove('open')">Close</button>`;
+  d.classList.add("open");
+}
+
+function applySnapshot(s) {
+  order = s.results.map((r) => r.id);
+  probes = new Map(s.results.map((r) => [r.id, r]));
+  renderRibbon(s.system);
+  renderTable();
+  setRunning(s.running);
+}
+
+function setRunning(running) {
+  $("#run").disabled = running;
+  $("#statusline").textContent = running ? "probes running…" : "";
+  if (running) {
+    for (const [id, p] of probes) { p.status = "running"; probes.set(id, p); }
+    renderTable();
+  }
+}
+
+// ---- live events ----
+function connect() {
+  const es = new EventSource("/api/events");
+  es.addEventListener("snapshot", (e) => applySnapshot(JSON.parse(e.data)));
+  es.addEventListener("probe", (e) => {
+    const p = JSON.parse(e.data);
+    if (!order.includes(p.id)) order.push(p.id);
+    probes.set(p.id, p);
+    renderTable();
+  });
+  es.addEventListener("run_start", () => setRunning(true));
+  es.addEventListener("run_complete", () => setRunning(false));
+  es.addEventListener("config", () => { loadConfigEditor(); refreshSnapshot(); });
+  es.onopen = () => { const c = $("#conn"); c.textContent = "● live"; c.classList.add("live"); };
+  es.onerror = () => { const c = $("#conn"); c.textContent = "○ reconnecting…"; c.classList.remove("live"); };
+}
+
+async function refreshSnapshot() {
+  const r = await fetch("/api/probes");
+  const body = await r.json();
+  order = body.results.map((x) => x.id);
+  body.results.forEach((x) => probes.set(x.id, x));
+  renderTable();
+}
+
+$("#run").addEventListener("click", async () => { await fetch("/api/run", { method: "POST" }); });
+
+// ---- YAML editor ----
+$("#toggle-editor").addEventListener("click", () => {
+  const m = $("#main");
+  m.classList.toggle("editing");
+  if (m.classList.contains("editing")) loadConfigEditor();
+});
+async function loadConfigEditor() {
+  $("#yaml").value = await (await fetch("/api/config")).text();
+  $("#cfgerr").textContent = "";
+}
+$("#reload-cfg").addEventListener("click", loadConfigEditor);
+$("#save-cfg").addEventListener("click", async () => {
+  const resp = await fetch("/api/config", { method: "PUT", body: $("#yaml").value });
+  if (resp.status === 422) {
+    const body = await resp.json();
+    $("#cfgerr").textContent = body.detail || "invalid configuration";
+  } else {
+    $("#cfgerr").textContent = "";
+    $("#statusline").textContent = "configuration applied";
+    setTimeout(() => ($("#statusline").textContent = ""), 2500);
+  }
+});
+
+// ---- OpenShell policy interop ----
+$("#import-policy").addEventListener("click", () => $("#policy-file").click());
+$("#policy-file").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0]; if (!file) return;
+  const text = await file.text();
+  const resp = await fetch("/api/policy/import", { method: "POST", body: text });
+  if (resp.status === 422) {
+    $("#cfgerr").textContent = (await resp.json()).detail || "not a derivable policy";
+  } else {
+    $("#yaml").value = await resp.text();   // into the editor; Save & Apply to activate
+    $("#cfgerr").textContent = "";
+    $("#statusline").textContent = "policy imported — review, then Save & Apply";
+  }
+  ev.target.value = "";
+});
+$("#export-policy").addEventListener("click", async () => {
+  const text = await (await fetch("/api/policy/export")).text();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/yaml" }));
+  a.download = "openshell-policy.yaml";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+connect();
+</script>
+</body>
+</html>

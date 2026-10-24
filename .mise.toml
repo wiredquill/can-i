@@ -1,0 +1,37 @@
+# can-i — native/agent-local toolchain, managed by mise.
+# Usage: mise install && mise run install && mise run test
+[tools]
+python = "3.13"
+uv = "latest"
+
+[env]
+PYTHONPATH = "src"
+CAN_I_CONFIG = "checks.yaml"
+
+[tasks.install]
+description = "Create the virtualenv and install can-i with dev dependencies"
+run = """
+set -e
+uv venv .venv --python 3.13
+uv pip install --python .venv/bin/python -e '.[dev]'
+"""
+
+[tasks.test]
+description = "Run the full test suite (unit + integration + TUI)"
+run = ".venv/bin/python -m pytest tests/ -q"
+
+[tasks."test:container"]
+description = "Run containerized sandbox e2e tests (needs podman or docker)"
+run = "RUN_CONTAINER_TESTS=1 .venv/bin/python -m pytest tests/ -q -m container"
+
+[tasks.dev]
+description = "Start the web dashboard on :8000 (alias for start:web)"
+run = "mise run start:web"
+
+[tasks."start:tui"]
+description = "Start the terminal UI"
+run = ".venv/bin/can-i tui"
+
+[tasks."start:web"]
+description = "Start the web dashboard"
+run = ".venv/bin/can-i web --host 0.0.0.0 --port ${CAN_I_PORT:-8000}"

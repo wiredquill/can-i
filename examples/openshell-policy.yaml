@@ -1,0 +1,25 @@
+# Example OpenShell v0.1.5 policy for trying can-i's policy interop:
+#   can-i from-policy examples/openshell-policy.yaml -o checks-derived.yaml
+#   can-i run --config checks-derived.yaml
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /etc/resolv.conf
+    - /etc/hosts
+  read_write:
+    - /tmp
+process:
+  run_as_user: sandbox
+network_policies:
+  allow-suse:
+    name: allow-suse
+    endpoints:
+      - host: suse.com
+        port: 443
+      - host: opensuse.org
+        port: 443
+      - host: download.opensuse.org
+        port: 443
+    binaries:
+      - /usr/bin/curl

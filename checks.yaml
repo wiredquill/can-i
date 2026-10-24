@@ -1,0 +1,111 @@
+# can-i probe definitions.
+# Exit code 0 = ALLOWED by the current sandbox/policy; anything else = DENIED.
+# Edit live from the web UI (✎ checks.yaml) or via: PUT /api/config
+version: 1
+
+settings:
+  interval_seconds: 3        # continuous-mode loop interval
+  default_timeout_seconds: 5
+
+checks:
+  # ---- Network -------------------------------------------------------------
+  - id: net-https-external
+    name: Outbound HTTPS (suse.com)
+    category: network
+    command: curl -fsS --max-time 3 -o /dev/null https://suse.com
+    description: External egress over TLS.
+    expect: allowed
+
+  - id: net-dns-lookup
+    name: DNS resolution
+    category: network
+    command: getent hosts opensuse.org
+    description: Name resolution via NSS/DNS.
+    expect: allowed
+
+  - id: net-raw-socket-ping
+    name: Raw ICMP socket (ping)
+    category: network
+    command: ping -c1 -W2 1.1.1.1
+    description: Requires CAP_NET_RAW; dropped in most sandboxes.
+
+  - id: net-http-metadata
+    name: Cloud metadata endpoint
+    category: network
+    timeout: 3
+    command: curl -fsS --max-time 2 -o /dev/null http://169.254.169.254/
+    description: Link-local metadata service; should be denied in sandboxes.
+    expect: denied
+
+  # ---- Filesystem ----------------------------------------------------------
+  - id: fs-read-shadow
+    name: Read /etc/shadow
+    category: filesystem
+    command: head -c1 /etc/shadow
+    description: Sensitive credential file; denied for unprivileged users.
+    expect: denied
+
+  - id: fs-write-etc
+    name: Write to /etc
+    category: filesystem
+    command: touch /etc/.can-i-probe
+    description: System config write; denied read-only-rootfs / unprivileged.
+    expect: denied
+
+  - id: fs-write-tmp
+    name: Write to /tmp
+    category: filesystem
+    command: sh -c 'touch /tmp/.can-i-probe && rm -f /tmp/.can-i-probe'
+    description: Scratch space write; normally allowed.
+    expect: allowed
+
+  - id: fs-exec-tmp
+    name: Execute from /tmp
+    category: filesystem
+    command: sh -c 'printf "#!/bin/sh\nexit 0\n" > /tmp/.can-i-x && chmod +x /tmp/.can-i-x && /tmp/.can-i-x; rc=$?; rm -f /tmp/.can-i-x; exit $rc'
+    description: Denied when /tmp is mounted noexec.
+    expect: allowed
+
+  - id: fs-read-proc-environ
+    name: Read /proc/1/environ
+    category: filesystem
+    command: head -c1 /proc/1/environ
+    description: Init process environment; denied by hidepid/privilege drop.
+    expect: denied
+
+  # ---- Processes & binaries ------------------------------------------------
+  - id: proc-spawn-sh
+    name: Spawn a shell (sh)
+    category: process
+    command: sh -c 'exit 0'
+    description: Subprocess creation; blocked by strict OpenShell profiles.
+    expect: allowed
+
+  - id: proc-spawn-curl
+    name: Spawn curl
+    category: process
+    command: curl --version
+    description: Network-capable binary execution.
+    expect: allowed
+
+  - id: proc-spawn-nmap
+    name: Spawn nmap (scanner)
+    category: process
+    command: nmap --version
+    description: Typically absent or blocked in sandboxes.
+    expect: denied
+
+  - id: proc-privesc-unshare
+    name: Namespace creation (unshare)
+    category: process
+    timeout: 3
+    command: unshare --user --map-root-user true
+    description: User-namespace creation; denied when unprivileged userns is off.
+
+  - id: proc-privesc-sudo
+    name: Privilege escalation (sudo -n)
+    category: process
+    timeout: 3
+    command: sudo -n true
+    description: Non-interactive sudo; denied without credentials/rights.
+    expect: denied
