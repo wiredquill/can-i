@@ -78,14 +78,62 @@ podman run --rm can-i run                               # one-shot probe report
 podman run --rm --cap-drop ALL --read-only can-i run
 ```
 
-### 3. Inside an OpenShell sandbox
+### 3. Running under OpenShell (the clean demo)
+
+The most effective way to show OpenShell enforcement: **launch the can-i container image as
+the workload of a child sandbox** with a policy attached. The dashboard then shows, live,
+exactly what that policy allows and denies — no host changes, no container rebuilds.
 
 ```bash
-# install like any agent payload, then attach a terminal
-openshell sandbox connect my-sandbox
-can-i tui
-# apply/drop a profile in another shell — indicators flip live
+# one-time: point the CLI at a gateway
+openshell gateway add http://127.0.0.1:18080 --local --name local
+openshell gateway select local
+
+# launch the can-i image as the sandbox workload, policy attached at creation
+openshell sandbox create --name can-i \
+  --from ghcr.io/wiredquill/can-i:latest \
+  --policy examples/policy-to-run-can-i.yaml \
+  --detach -- can-i web --host 0.0.0.0 --port 8000
+
+# or attach a terminal and drive the TUI yourself
+openshell sandbox create --name can-i-tui \
+  --from ghcr.io/wiredquill/can-i:latest \
+  --policy examples/policy-to-run-can-i.yaml
 ```
+
+[`examples/policy-to-run-can-i.yaml`](examples/policy-to-run-can-i.yaml) is the minimal grant
+set: `/tmp` writable, `run_as_user: sandbox`, and egress only for `curl → suse.com:443`.
+Everything the dashboard shows as DENIED (metadata endpoint, `/etc/shadow`, `/etc` writes,
+nmap, sudo, raw ICMP) is denied *by omission* — OpenShell never authorizes
+`169.254.169.254`, and raw ICMP isn't expressible in endpoint rules at all, so those badges
+are red by construction.
+
+The demo moment — change the network policy live while the dashboard runs (network rules
+hot-reload; filesystem/process changes need a sandbox recreate):
+
+```bash
+# grant another destination: the matching badge flips DENIED -> ALLOWED
+# (endpoint value = host:port:access:protocol:enforcement)
+openshell policy update can-i \
+  --rule-name can-i-egress --binary /usr/bin/curl \
+  --add-endpoint opensuse.org:443:read-only:rest:enforce --wait
+
+# pull the plug: every network badge goes red
+openshell policy update can-i --remove-rule can-i-egress --wait
+
+# verify what the sandbox actually enforces
+openshell policy get can-i --full
+```
+
+Generate the equivalent policy from any can-i config with
+`can-i to-policy --config checks.yaml`, or derive a test plan from an existing policy with
+`can-i from-policy policy.yaml` — see [OpenShell policy interop](#openshell-policy-interop-both-directions).
+You can also bake a policy into an image at `/etc/openshell/policy.yaml`; a `--policy` file
+or `OPENSHELL_SANDBOX_POLICY` takes precedence.
+
+Note: the web UI on :8000 is *inbound* traffic — sandbox policies govern egress and
+filesystem, not port publishing. Reach the UI via the sandbox's connectivity options
+(`openshell sandbox connect`, port forwarding), or just use the TUI over the attach session.
 
 ## Usage
 

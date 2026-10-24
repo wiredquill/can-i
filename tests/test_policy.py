@@ -158,7 +158,16 @@ def test_checks_network_become_network_policies():
     assert "network_policies:" in out
     assert "suse.com" in out
     assert "download.opensuse.org" in out
-    assert "/usr/bin/curl" in out or "/bin/curl" in out
+    # OpenShell schema: binaries are objects with a path field, not plain strings
+    assert "- path: /usr/bin/curl" in out or "- path: /bin/curl" in out
+
+
+def test_policy_binaries_accept_both_object_and_string_form():
+    cfg = policy_to_checks(POLICY)  # POLICY uses string form
+    assert any("curl" in c.command for c in cfg.checks if c.category == "network")
+    object_form = POLICY.replace("- /usr/bin/curl", "- path: /usr/bin/curl")
+    cfg2 = policy_to_checks(object_form)
+    assert any("curl" in c.command for c in cfg2.checks if c.category == "network")
 
 
 def test_checks_fs_grants_become_filesystem_policy():

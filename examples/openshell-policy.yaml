@@ -22,4 +22,4 @@ network_policies:
       - host: download.opensuse.org
         port: 443
     binaries:
-      - /usr/bin/curl
+      - path: /usr/bin/curl

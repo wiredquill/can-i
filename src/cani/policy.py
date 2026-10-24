@@ -129,10 +129,14 @@ def policy_to_checks(policy_text: str) -> Config:
     for _policy_name, policy in net.items():
         if not isinstance(policy, dict):
             continue
-        binaries = policy.get("binaries") or ["/usr/bin/curl"]
+        raw_binaries = policy.get("binaries") or ["/usr/bin/curl"]
+        # schema form is {"path": ...}; tolerate plain strings on import
+        binaries = [
+            b.get("path", "") if isinstance(b, dict) else str(b) for b in raw_binaries
+        ]
         for endpoint in policy.get("endpoints") or []:
             if isinstance(endpoint, dict):
-                check = _endpoint_check(endpoint, binaries[0])
+                check = _endpoint_check(endpoint, binaries[0] if binaries else "curl")
                 if check:
                     checks.append(check)
     if net:
@@ -229,11 +233,13 @@ def checks_to_policy(config: Config) -> str:
         if read_write:
             policy["filesystem_policy"]["read_write"] = read_write
     if endpoints:
+        # OpenShell schema: binaries are objects, {"path": "/usr/bin/curl"}
+        binary_objs = [{"path": b} for b in sorted(binaries)] or [{"path": "/usr/bin/curl"}]
         policy["network_policies"] = {
             "can-i-egress": {
                 "name": "can-i-egress",
                 "endpoints": endpoints,
-                "binaries": sorted(binaries) or ["/usr/bin/curl"],
+                "binaries": binary_objs,
             }
         }
 

@@ -1,0 +1,37 @@
+# Minimal OpenShell v0.1.5 policy to run can-i (CLI or container image)
+# as a sandbox workload — and to make the demo meaningful.
+#
+#   openshell sandbox create --name can-i \
+#     --from ghcr.io/wiredquill/can-i:latest \
+#     --policy examples/policy-to-run-can-i.yaml \
+#     -- can-i tui
+#
+# What you should see on the dashboard under this policy:
+#   ALLOWED: HTTPS to suse.com, spawn sh/curl, write+exec /tmp
+#   DENIED : metadata endpoint, /etc/shadow, /etc writes, nmap, sudo,
+#            unshare, raw ICMP (not grantable by endpoint rules)
+version: 1
+
+filesystem_policy:
+  # /tmp is the only write can-i needs (fs-write-tmp / fs-exec-tmp probes).
+  # System paths (/usr, /lib, /etc, ...) are added automatically by OpenShell's
+  # baseline because this policy declares network rules.
+  read_write:
+    - /tmp
+
+process:
+  run_as_user: sandbox   # non-root — makes shadow/sudo probes go red
+
+network_policies:
+  can-i-egress:
+    name: can-i-egress
+    endpoints:
+      - host: suse.com
+        port: 443
+      # add opensuse.org here if you want the DNS/getent probe greener
+    binaries:
+      - path: /usr/bin/curl
+
+# Deliberately absent (absence IS the denial — these probes must show DENIED):
+#   - 169.254.169.254 (cloud metadata; OpenShell never authorizes it)
+#   - /etc/shadow, /etc writes, nmap, sudo, unshare, raw ICMP ping
