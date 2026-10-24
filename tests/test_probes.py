@@ -52,6 +52,18 @@ async def test_timeout_kills_probe_and_reports_denied():
     assert elapsed < 5  # actually killed, not waited out
 
 
+async def test_timeout_kills_process_group_not_just_shell():
+    # A compound command ("sleep 8; true") prevents the shell from exec-ing the
+    # sleep directly: the shell must stay alive, so killing only the shell would
+    # leave the sleep holding the pipes open. The engine must kill the group.
+    start = time.monotonic()
+    r = await run_probe(mkcheck("sleep 8; true", timeout=0.2))
+    elapsed = time.monotonic() - start
+    assert r.status == Status.DENIED
+    assert "timed out" in r.detail.lower()
+    assert elapsed < 5
+
+
 async def test_spawn_failure_is_error_not_denied(monkeypatch):
     def boom(*args, **kwargs):
         raise OSError("exec format error")

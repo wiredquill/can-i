@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import enum
+import os
+import signal
 import time
 from collections.abc import Awaitable, Callable
 
@@ -62,6 +64,10 @@ async def run_probe(check: Check) -> ProbeResult:
             check.command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            # own process group so a timeout can kill shell AND grandchildren;
+            # otherwise a surviving child keeps the pipes open and
+            # communicate() blocks until it exits on its own
+            start_new_session=True,
         )
     except OSError as exc:
         return ProbeResult(
@@ -81,7 +87,10 @@ async def run_probe(check: Check) -> ProbeResult:
         stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
         timed_out = True
-        proc.kill()
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            proc.kill()
         stdout_b, stderr_b = await proc.communicate()
 
     latency_ms = (time.monotonic() - start) * 1000
