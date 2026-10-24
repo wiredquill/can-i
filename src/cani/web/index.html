@@ -53,8 +53,25 @@
                    animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
 
-  .cat { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .cat { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+  .cat::before { content: "●"; margin-right: 6px; }
+  .cat-network   { color: #4c9aff; }
+  .cat-filesystem{ color: #bc8cff; }
+  .cat-process   { color: #39c5cf; }
+  tr.probe.cat-row-network    { border-left: 3px solid #4c9aff; }
+  tr.probe.cat-row-filesystem { border-left: 3px solid #bc8cff; }
+  tr.probe.cat-row-process    { border-left: 3px solid #39c5cf; }
   .cmd { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 12px; color: var(--muted); }
+
+  #filters { display: flex; gap: 8px; align-items: center; }
+  #filters .lbl { color: var(--muted); font-size: 12px; margin-right: 2px; }
+  .flt { background: var(--panel2); border: 1px solid var(--border); color: var(--fg);
+         border-radius: 999px; padding: 4px 14px; font-size: 12px; font-weight: 700;
+         cursor: pointer; opacity: .45; }
+  .flt.on { opacity: 1; }
+  .flt.f-network.on    { border-color: #4c9aff; color: #4c9aff; }
+  .flt.f-filesystem.on { border-color: #bc8cff; color: #bc8cff; }
+  .flt.f-process.on    { border-color: #39c5cf; color: #39c5cf; }
 
   #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 92vw);
             background: var(--panel); border-left: 1px solid var(--border);
@@ -91,6 +108,13 @@
 <div id="toolbar">
   <button id="run">▶ Run Probes</button>
   <button class="ghost" id="toggle-editor">✎ checks.yaml</button>
+  <div id="filters">
+    <span class="lbl">Views:</span>
+    <button class="flt f-network on" data-cat="network">Network</button>
+    <button class="flt f-filesystem on" data-cat="filesystem">Filesystem</button>
+    <button class="flt f-process on" data-cat="process">Process</button>
+    <span class="lbl" id="shown-count"></span>
+  </div>
   <span id="statusline"></span>
 </div>
 
@@ -126,6 +150,7 @@
 const $ = (s) => document.querySelector(s);
 let probes = new Map();   // id -> result object
 let order = [];           // stable display order
+const hiddenCats = new Set();  // categories toggled off in the Views filter
 
 function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
 
@@ -158,18 +183,23 @@ function expectCell(p) {
 }
 
 function renderTable() {
+  let shown = 0, total = 0;
   $("#rows").innerHTML = order.map((id) => {
     const p = probes.get(id); if (!p) return "";
-    return `<tr class="probe" data-id="${esc(id)}">
+    total++;
+    if (hiddenCats.has(p.category)) return "";
+    shown++;
+    return `<tr class="probe cat-row-${esc(p.category)}" data-id="${esc(id)}">
       <td><span class="badge ${p.status}">${p.status.toUpperCase()}</span></td>
       <td>${esc(p.name)}</td>
-      <td><span class="cat">${esc(p.category)}</span></td>
+      <td><span class="cat cat-${esc(p.category)}">${esc(p.category)}</span></td>
       <td><span class="cmd">${esc(p.command || "")}</span></td>
       <td>${expectCell(p)}</td>
       <td>${p.exit_code ?? "—"}</td>
       <td>${p.latency_ms ? Math.round(p.latency_ms) + " ms" : "—"}</td>
     </tr>`;
   }).join("");
+  $("#shown-count").textContent = hiddenCats.size ? `${shown}/${total} shown` : "";
   document.querySelectorAll("tr.probe").forEach((tr) =>
     tr.addEventListener("click", () => openDrawer(tr.dataset.id)));
 }
@@ -235,6 +265,15 @@ async function refreshSnapshot() {
 }
 
 $("#run").addEventListener("click", async () => { await fetch("/api/run", { method: "POST" }); });
+
+// ---- category view filters ----
+document.querySelectorAll(".flt").forEach((btn) =>
+  btn.addEventListener("click", () => {
+    const cat = btn.dataset.cat;
+    if (hiddenCats.has(cat)) { hiddenCats.delete(cat); btn.classList.add("on"); }
+    else { hiddenCats.add(cat); btn.classList.remove("on"); }
+    renderTable();
+  }));
 
 // ---- YAML editor ----
 $("#toggle-editor").addEventListener("click", () => {
