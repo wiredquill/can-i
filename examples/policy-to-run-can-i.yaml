@@ -13,14 +13,23 @@
 version: 1
 
 filesystem_policy:
+  # can-i is installed under /usr/local (pip --prefix), which the OpenShell
+  # baseline paths do NOT cover — without these read_only entries the entrypoint
+  # fails to spawn with EACCES under Landlock.
+  read_only:
+    - /usr
+    - /usr/local
+    - /lib
+    - /lib64
+    - /etc
   # /tmp is the only write can-i needs (fs-write-tmp / fs-exec-tmp probes).
-  # System paths (/usr, /lib, /etc, ...) are added automatically by OpenShell's
-  # baseline because this policy declares network rules.
   read_write:
     - /tmp
 
 process:
-  run_as_user: sandbox   # non-root — makes shadow/sudo probes go red
+  # must name an identity that exists in the image: the can-i image ships
+  # user 'cani' with uid 10001 (OpenShell rejects 0/root)
+  run_as_user: "10001"
 
 network_policies:
   can-i-egress:

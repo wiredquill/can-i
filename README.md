@@ -102,7 +102,10 @@ openshell sandbox create --name can-i-tui \
 ```
 
 [`examples/policy-to-run-can-i.yaml`](examples/policy-to-run-can-i.yaml) is the minimal grant
-set: `/tmp` writable, `run_as_user: sandbox`, and egress only for `curl → suse.com:443`.
+set: `/tmp` writable, `run_as_user: "10001"` (the image's `cani` user — `sandbox` only works
+if the image ships that account), and egress only for `curl → suse.com:443`. It also needs
+`read_only` on `/usr`, `/usr/local`, `/lib`, `/lib64`, `/etc` — the OpenShell baseline paths
+do not cover `/usr/local`, where the image installs can-i.
 Everything the dashboard shows as DENIED (metadata endpoint, `/etc/shadow`, `/etc` writes,
 nmap, sudo, raw ICMP) is denied *by omission* — OpenShell never authorizes
 `169.254.169.254`, and raw ICMP isn't expressible in endpoint rules at all, so those badges
@@ -132,8 +135,17 @@ You can also bake a policy into an image at `/etc/openshell/policy.yaml`; a `--p
 or `OPENSHELL_SANDBOX_POLICY` takes precedence.
 
 Note: the web UI on :8000 is *inbound* traffic — sandbox policies govern egress and
-filesystem, not port publishing. Reach the UI via the sandbox's connectivity options
-(`openshell sandbox connect`, port forwarding), or just use the TUI over the attach session.
+filesystem, not port publishing. Forward it out of the sandbox instead:
+
+```bash
+openshell forward service --target-port 8000 --local 0.0.0.0:8477 can-i
+# dashboard now on http://<host>:8477 — served from INSIDE the sandbox
+```
+
+Verified on OpenShell v0.1.5 (docker driver): `can-i run` in the sandbox reports
+**12/12 expectations met** — suse.com/DNS and /tmp allowed; metadata, /etc/shadow,
+/etc writes, /proc/1/environ denied (Landlock); unshare denied (seccomp: filter);
+ping/nmap/sudo denied.
 
 ## Usage
 
