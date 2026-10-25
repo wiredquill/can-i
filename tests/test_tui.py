@@ -6,7 +6,7 @@ import pytest
 from textual.widgets import DataTable
 
 from cani.state import ProbeState
-from cani.tui import CanIApp, CategorySwitch, Lane
+from cani.tui import CanIApp, CategorySwitch, Lane, StageTile
 
 YAML = """\
 checks:
@@ -212,3 +212,36 @@ async def test_config_reload_adds_a_category_box(state):
             await pilot.pause()
         assert {lane.category for lane in app.query(Lane)} == {"network", "filesystem", "process"}
         assert "Some network probe" in cell_text(app)
+
+
+def stage_text(app: CanIApp) -> str:
+    return "\n".join(str(t.query_one(".st-list").render()) for t in app.query(StageTile) if t.display)
+
+
+async def test_stage_mode_toggle_shows_big_tiles(state):
+    app = CanIApp(state)
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        assert not app.query_one("#stage").display
+        await pilot.press("s")
+        await pilot.pause()
+        assert app.query_one("#stage").display
+        assert not app.query_one("#lanes").display
+        await _run_and_settle(app, state, pilot)
+        assert "Always allowed" in stage_text(app) and "Always denied" in stage_text(app)
+        assert "CAN THE AGENT" in str(app.query_one("#st-banner").render())
+        await pilot.press("2")  # category switches still work in stage mode
+        await pilot.pause()
+        assert "Always denied" not in stage_text(app)
+
+
+async def test_stage_mode_announces_revoked_access(state):
+    app = CanIApp(state, stage=True)
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        await _run_and_settle(app, state, pilot)
+        state.update_config(YAML.replace("command: 'true'", "command: 'false'"))
+        await _run_and_settle(app, state, pilot)
+        assert "ACCESS REVOKED" in str(app.query_one("#st-banner").render())
+        assert "REVOKED" in stage_text(app)
+        assert len(app.trend) == 2 and app.trend[-1] < app.trend[0]

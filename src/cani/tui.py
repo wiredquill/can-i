@@ -8,7 +8,7 @@ from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import DataTable, Footer, Header, Static
+from textual.widgets import DataTable, Digits, Footer, Header, Sparkline, Static
 
 from .probes import Blocker, ProbeResult, Status
 from .state import ProbeState
@@ -47,6 +47,8 @@ BLOCKER_STYLES = {
 
 HISTORY = 10
 FLASH_SECONDS = 2.0
+BANNER_SECONDS = 8.0
+TREND = 60  # runs kept for the stage-mode trend line
 
 
 def granted(status: str) -> bool:
@@ -154,6 +156,59 @@ class Lane(Vertical):
         self.set_timer(FLASH_SECONDS, done)
 
 
+class StageTile(Vertical):
+    """Stage mode: one big tile per category, readable from the back of a room."""
+
+    def __init__(self, category: str) -> None:
+        super().__init__(id=f"stage-{category}", classes="stage-tile")
+        self.category = category
+        self.styles.border = ("heavy", cat_meta(category)[2])
+
+    def compose(self) -> ComposeResult:
+        yield Digits("–", classes="st-digits")
+        yield Static(classes="st-sub")
+        yield Static(classes="st-list")
+
+    def show(self, rows: list[tuple[dict, str | None, str | None, Blocker | None, str | None]]) -> None:
+        """rows: (result, verdict, delta, blocker, flash) per probe in this category."""
+        glyph, label, color = cat_meta(self.category)
+        self.border_title = f"[b {color}] {glyph}  {label} [/]"
+        allowed = sum(1 for _, v, *_ in rows if v and granted(v))
+        ran = sum(1 for _, v, *_ in rows if v)
+        digits = self.query_one(Digits)
+        digits.update(str(allowed) if ran else "–")
+        digits.styles.color = GREEN if allowed else RED if ran else "#5a6b80"
+        verdict = ("NOT RUN", "#5a6b80") if not ran else ("WIDE OPEN", GREEN) if allowed == len(rows) else \
+                  ("LOCKED DOWN", RED) if allowed == 0 else ("PARTIAL", AMBER)
+        # short screens hide the big digit, so the count moves into this line
+        count = f"{allowed} of {len(rows)}" if self.screen.has_class("-short") and ran else f"of {len(rows)}"
+        self.query_one(".st-sub", Static).update(Text.assemble(
+            (f"{count} actions allowed  ", "dim"), (f" {verdict[0]} ", f"bold #05080d on {verdict[1]}")))
+        lines = []
+        for r, v, delta, blocker, flash in rows:
+            # two lines per probe so nothing wraps: the action, then why / what changed
+            if v is None:
+                line = Text.assemble(("  …  ", "dim"), (r["name"], "dim"))
+            elif granted(v):
+                line = Text.assemble(("  ✔  ", f"bold {GREEN}"), (r["name"], "bold"))
+            else:
+                line = Text.assemble(("  ✘  ", f"bold {RED}"), (r["name"], "bold #c9d3de"))
+            if flash:
+                line.stylize("on #123a24" if flash == "gained" else "on #4a1517")
+            sub = Text("     ")
+            if delta == "gained":
+                sub.append(" ▲ GRANTED ", style=f"bold #04140a on {GREEN}")
+                sub.append(" ")
+            elif delta == "lost":
+                sub.append(" ▼ REVOKED ", style=f"bold white on {RED}")
+                sub.append(" ")
+            if blocker is not None:
+                bglyph, bstyle = BLOCKER_STYLES[blocker.kind]
+                sub.append(f"{bglyph} {blocker.layer}", style=bstyle)
+            lines.append(Text("\n").join([line, sub]))
+        self.query_one(".st-list", Static).update(Text("\n\n").join(lines))
+
+
 class CanIApp(App):
     """Live sandbox capability dashboard for the terminal."""
 
@@ -219,6 +274,90 @@ class CanIApp(App):
         color: $text-muted;
         display: none;
     }
+    #stage {
+        height: 1fr;
+        display: none;
+    }
+    #st-banner {
+        height: 3;
+        content-align: center middle;
+        text-style: bold;
+        background: $panel;
+    }
+    #st-score {
+        height: auto;
+        padding: 0 1;
+    }
+    .st-box {
+        width: 1fr;
+        height: auto;
+        margin: 0 1;
+        border: round $primary-darken-2;
+        align-horizontal: center;
+    }
+    .st-box Digits {
+        width: auto;
+        text-style: bold;
+    }
+    .st-box Static {
+        width: auto;
+        color: $text-muted;
+    }
+    #st-tiles {
+        height: 1fr;
+        padding: 0 1;
+    }
+    .stage-tile {
+        width: 1fr;
+        height: 1fr;
+        overflow-y: auto;
+        margin: 1 1 0 1;
+        padding: 0 2;
+        border-title-align: center;
+    }
+    .stage-tile Digits {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+    }
+    .st-list {
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+    }
+    .st-sub {
+        width: 100%;
+        text-align: center;
+        margin-bottom: 1;
+    }
+    #st-trend {
+        height: 5;
+        margin: 1 2 0 2;
+        padding: 0 1;
+        border: round $primary-darken-2;
+        border-title-align: left;
+    }
+    #st-trend Sparkline {
+        height: 3;
+    }
+    #st-trend Sparkline > .sparkline--max-color {
+        color: #2fbf71;
+    }
+    #st-trend Sparkline > .sparkline--min-color {
+        color: #e5484d;
+    }
+    /* short terminals (kubectl exec windows): give the category tiles all the room */
+    Screen.-short #st-score, Screen.-short #st-trend {
+        display: none;
+    }
+    Screen.-short .stage-tile Digits {
+        display: none;
+    }
+    CanIApp.stage #ribbon, CanIApp.stage #score, CanIApp.stage #lanes, CanIApp.stage #detail {
+        display: none;
+    }
+    CanIApp.stage #stage {
+        display: block;
+    }
     #detail {
         height: 12;
         padding: 1 2;
@@ -226,6 +365,8 @@ class CanIApp(App):
         background: $panel;
     }
     """
+
+    VERTICAL_BREAKPOINTS = [(0, "-short"), (40, "-tall")]
 
     BINDINGS = [
         ("r", "run_probes", "Run probes"),
@@ -237,12 +378,16 @@ class CanIApp(App):
         ("3", "toggle_cat_key(3)", "Process"),
         *[(str(n), f"toggle_cat_key({n})", "") for n in range(4, 10)],
         ("0", "show_all", "Show all"),
+        ("s", "toggle_stage", "Stage mode"),
         ("q", "quit", "Quit"),
     ]
 
-    def __init__(self, state: ProbeState) -> None:
+    def __init__(self, state: ProbeState, stage: bool = False) -> None:
         super().__init__()
         self.state = state
+        self.stage = stage
+        self.trend: list[int] = []  # allowed count after each run
+        self._banner_timer = None
         self._pump_task: asyncio.Task | None = None
         # access-change tracking, all keyed by probe id with status strings
         self.last: dict[str, str] = {}  # latest final verdict
@@ -277,10 +422,28 @@ class CanIApp(App):
                 yield Lane(cat)
             yield Static("all categories hidden — press [b]0[/] to show everything, or 1-3 to bring one back",
                          id="all-hidden")
+        with Vertical(id="stage"):
+            yield Static(id="st-banner")
+            with Horizontal(id="st-score"):
+                for key, label, color in (("allowed", "ALLOWED", GREEN), ("denied", "DENIED", RED),
+                                          ("granted", "GRANTED", GREEN), ("revoked", "REVOKED", RED)):
+                    with Vertical(classes="st-box"):
+                        digits = Digits("–", id=f"st-{key}")
+                        digits.styles.color = color
+                        yield digits
+                        yield Static(label, id=f"st-{key}-label")
+            with Horizontal(id="st-tiles"):
+                for cat in self.cats:
+                    yield StageTile(cat)
+            with Vertical(id="st-trend"):
+                yield Sparkline([0, 0], summary_function=max)
         yield Static("select a probe row to inspect stdout/stderr", id="detail")
         yield Footer()
 
     def on_mount(self) -> None:
+        self.set_class(self.stage, "stage")
+        self.query_one("#st-trend").border_title = "access over time (allowed per run)"
+        self._banner()
         for result in self.state.results.values():
             self._ingest(result, live=False)
         self.refresh_table()
@@ -298,6 +461,9 @@ class CanIApp(App):
         await switches.mount_all([CategorySwitch(c, self.cat_key(c)) for c in self.cats])
         await lanes.remove_children(".lane")
         await lanes.mount_all([Lane(c) for c in self.cats], before="#all-hidden")
+        tiles = self.query_one("#st-tiles")
+        await tiles.remove_children()
+        await tiles.mount_all([StageTile(c) for c in self.cats])
         self.refresh_table()
 
     def on_unmount(self) -> None:
@@ -435,6 +601,55 @@ class CanIApp(App):
             lane.summarize(allowed, denied, by_sandbox, len(lane_rows))
             self._fill_table(lane.table, lane_rows, running)
         self.query_one("#all-hidden").display = bool(self.cats) and all(c in self.hidden for c in self.cats)
+        self._render_stage(rows)
+
+    def _render_stage(self, rows: dict[str, list[dict]]) -> None:
+        allowed = denied = gained = lost = 0
+        for tile in self.query(StageTile):
+            tile.display = tile.category not in self.hidden
+            tile_rows = []
+            for r in rows.get(tile.category, []):
+                v = self.last.get(r["id"])
+                d = self.delta(r["id"])
+                blocker = Blocker(**r["blocker"]) if r.get("blocker") and v and not granted(v) else None
+                tile_rows.append((r, v, d, blocker, self.flashing.get(r["id"])))
+                if tile.category in self.hidden:
+                    continue
+                if v is not None:
+                    allowed += granted(v)
+                    denied += not granted(v)
+                gained += d == "gained"
+                lost += d == "lost"
+            tile.show(tile_rows)
+        ran = bool(self.last)
+        for key, n in (("allowed", allowed), ("denied", denied), ("granted", gained), ("revoked", lost)):
+            self.query_one(f"#st-{key}", Digits).update(str(n) if ran else "–")
+        ref = "vs baseline" if self.baseline is not None else "since last run"
+        self.query_one("#st-granted-label", Static).update(f"GRANTED {ref}")
+        self.query_one("#st-revoked-label", Static).update(f"REVOKED {ref}")
+        if len(self.trend) >= 2:
+            self.query_one(Sparkline).data = self.trend[-TREND:]
+
+    def _banner(self, kind: str | None = None, message: str = "") -> None:
+        """Headline across the top of stage mode: the last access change, else who we are."""
+        banner = self.query_one("#st-banner", Static)
+        if kind is None:
+            sysinfo = self.state.snapshot()["system"]
+            landlock = f"Landlock v{sysinfo['landlock_abi']}" if sysinfo.get("landlock_abi") else "no Landlock"
+            enforced = "OpenShell sandbox" if sysinfo["openshell"] else "sandboxed" if sysinfo["sandboxed"] else "unsandboxed"
+            banner.update(Text.assemble(
+                ("CAN THE AGENT…?   ", f"bold {GREEN}"),
+                (f"{sysinfo['hostname']}", "bold"),
+                (f"  ·  {enforced}  ·  {landlock}  ·  seccomp {sysinfo['seccomp']}  ·  uid {sysinfo['uid']}", "dim"),
+            ))
+            banner.styles.background = None
+            return
+        color = GREEN if kind == "gained" else RED
+        banner.update(Text(message, style="bold #04140a" if kind == "gained" else "bold white"))
+        banner.styles.background = color
+        if self._banner_timer is not None:
+            self._banner_timer.stop()
+        self._banner_timer = self.set_timer(BANNER_SECONDS, lambda: self._banner())
 
     def _fill_table(self, table: DataTable, rows: list[dict], running: bool) -> None:
         cursor_key = None
@@ -582,13 +797,28 @@ class CanIApp(App):
             if self.cat_key(cat) == key:
                 self.action_toggle_cat(cat)
 
+    def on_resize(self) -> None:
+        self.call_after_refresh(self.refresh_table)  # breakpoint classes may have changed
+
+    def action_toggle_stage(self) -> None:
+        self.stage = not self.stage
+        self.set_class(self.stage, "stage")
+        self.refresh_table()
+
     def action_show_all(self) -> None:
         self.hidden.clear()
         self.refresh_table()
 
     def _summarize_run(self) -> None:
         lost = [r for kind, r in self.run_flips if kind == "lost"]
-        gained = len(self.run_flips) - len(lost)
+        granted_now = [r for kind, r in self.run_flips if kind == "gained"]
+        gained = len(granted_now)
+        if lost:
+            layers = sorted({r.blocker.layer for r in lost if r.blocker and r.blocker.kind == "sandbox"})
+            self._banner("lost", f"▼ ACCESS REVOKED   {', '.join(r.name for r in lost)}"
+                                 + (f"   — enforced by {', '.join(layers)}" if layers else ""))
+        elif granted_now:
+            self._banner("gained", f"▲ ACCESS GRANTED   {', '.join(r.name for r in granted_now)}")
         if lost:
             layers = sorted({r.blocker.layer for r in lost if r.blocker})
             by = f" by {', '.join(layers)}" if layers else ""
@@ -609,6 +839,8 @@ class CanIApp(App):
             if result is not None:
                 self._ingest(result, live=True)
         elif kind == "run_complete":
+            self.trend.append(sum(granted(v) for v in self.last.values()))
+            del self.trend[:-TREND]
             self._summarize_run()
             if self.auto:
                 self.set_timer(self.state.config.settings.interval_seconds, self.action_run_probes)

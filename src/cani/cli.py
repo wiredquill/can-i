@@ -38,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_tui = sub.add_parser("tui", help="interactive terminal dashboard")
     add_config(p_tui)
+    p_tui.add_argument("--stage", action="store_true",
+                       help="start in stage mode: full-screen category tiles for presenting (toggle with s)")
 
     p_web = sub.add_parser("web", help="web dashboard (FastAPI + SSE)")
     add_config(p_web)
@@ -128,7 +130,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_tui(args: argparse.Namespace) -> int:
     from .tui import CanIApp
 
-    CanIApp(_make_state(args.config)).run()
+    CanIApp(_make_state(args.config), stage=args.stage).run()
     return 0
 
 
