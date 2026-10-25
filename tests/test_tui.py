@@ -6,7 +6,7 @@ import pytest
 from textual.widgets import DataTable
 
 from cani.state import ProbeState
-from cani.tui import CanIApp
+from cani.tui import CanIApp, CategorySwitch, Lane
 
 YAML = """\
 checks:
@@ -29,10 +29,14 @@ def state(tmp_path):
 
 
 def cell_text(app: CanIApp) -> str:
-    table = app.query_one(DataTable)
+    """Rows of every *visible* category box."""
     out = []
-    for row_key in table.rows:
-        out.append(" ".join(str(c) for c in table.get_row(row_key)))
+    for lane in app.query(Lane):
+        if not lane.display:
+            continue
+        table = lane.query_one(DataTable)
+        for row_key in table.rows:
+            out.append(" ".join(str(c) for c in table.get_row(row_key)))
     return "\n".join(out)
 
 
@@ -96,8 +100,9 @@ async def test_row_selection_shows_detail_panel(state):
         await state.run_now()
         await pilot.pause()
         app.refresh_table()
-        table = app.query_one(DataTable)
-        table.move_cursor(row=1)
+        table = app.query_one("#table-filesystem", DataTable)
+        table.focus()
+        table.move_cursor(row=0)
         await pilot.pause()
         detail = str(app.query_one("#detail").render())
         assert "Always denied" in detail
@@ -157,7 +162,53 @@ async def test_category_and_blocker_columns(state):
         await pilot.pause()
         await _run_and_settle(app, state, pilot)
         text = cell_text(app)
-        assert "FILESYSTEM" in text and "PROCESS" in text
+        titles = " ".join(str(lane.border_title) for lane in app.query(Lane))
+        assert "FILESYSTEM" in titles and "PROCESS" in titles
         assert "exit 1" in text  # 'false' has no recognizable denial signal
         score = str(app.query_one("#score").render())
         assert "by sandbox" in score
+
+
+async def test_each_category_gets_its_own_box(state):
+    app = CanIApp(state)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        lanes = {lane.category: lane for lane in app.query(Lane)}
+        assert set(lanes) == {"filesystem", "process"}  # network absent from this config
+        await _run_and_settle(app, state, pilot)
+        assert "LOCKED DOWN" in str(lanes["filesystem"].border_subtitle)
+        assert "WIDE OPEN" in str(lanes["process"].border_subtitle)
+
+
+async def test_switch_click_and_show_all(state):
+    app = CanIApp(state)
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        await pilot.click("#switch-process")
+        await pilot.pause()
+        assert "Always allowed" not in cell_text(app)
+        assert "OFF" in str(app.query_one("#switch-process", CategorySwitch).render())
+        await pilot.press("2")  # hide filesystem too: nothing left
+        await pilot.pause()
+        assert app.query_one("#all-hidden").display
+        await pilot.press("0")
+        await pilot.pause()
+        assert "Always allowed" in cell_text(app) and "Always denied" in cell_text(app)
+        assert not app.query_one("#all-hidden").display
+
+
+async def test_config_reload_adds_a_category_box(state):
+    app = CanIApp(state)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        state.update_config(YAML + """\
+  - id: net
+    name: Some network probe
+    category: network
+    command: 'true'
+""")
+        app.refresh_table()
+        for _ in range(10):
+            await pilot.pause()
+        assert {lane.category for lane in app.query(Lane)} == {"network", "filesystem", "process"}
+        assert "Some network probe" in cell_text(app)

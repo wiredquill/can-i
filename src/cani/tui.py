@@ -7,6 +7,7 @@ import asyncio
 from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import DataTable, Footer, Header, Static
 
 from .probes import Blocker, ProbeResult, Status
@@ -27,6 +28,16 @@ CATEGORIES = {
     "filesystem": ("▤", "FILESYSTEM", "#bc8cff"),
     "process": ("⚙", "PROCESS", "#22d3ee"),
 }
+CATEGORY_SUBS = {
+    "network": "egress · DNS · sockets",
+    "filesystem": "read · write · exec",
+    "process": "spawn · namespaces · privesc",
+}
+COLUMNS = ("Status", "Δ", "Check", "Blocked by", "Exit", "Latency", "History")
+
+
+def cat_meta(category: str) -> tuple[str, str, str]:
+    return CATEGORIES.get(category, ("•", category.upper(), "#8ba0b8"))
 
 BLOCKER_STYLES = {
     "sandbox": ("◆", f"bold {SANDBOX}"),  # the sandbox policy said no
@@ -48,7 +59,7 @@ def status_cell(status: str | Status) -> Text:
 
 
 def category_cell(category: str) -> Text:
-    glyph, label, color = CATEGORIES.get(category, ("•", category.upper(), "white"))
+    glyph, label, color = cat_meta(category)
     return Text(f"{glyph} {label}", style=f"bold {color}")
 
 
@@ -80,6 +91,69 @@ def meter(allowed: int, total: int, width: int = 10) -> Text:
     return Text.assemble(("█" * filled, GREEN), ("█" * (width - filled), RED if total else "dim"))
 
 
+class CategorySwitch(Static):
+    """Clickable on/off tile for one category's view (keys 1-9 do the same)."""
+
+    def __init__(self, category: str, key: int) -> None:
+        super().__init__(id=f"switch-{category}", classes="switch")
+        self.category = category
+        self.key = key
+        self.styles.border = ("round", cat_meta(category)[2])
+
+    def show(self, on: bool, allowed: int, total: int) -> None:
+        glyph, label, color = cat_meta(self.category)
+        self.set_class(not on, "off")
+        self.styles.border = ("round", color if on else "#3a4656")
+        head = Text.assemble((f"[{self.key}] ", "dim"),
+                             (f"{glyph} {label}", f"bold {color}" if on else "dim strike"))
+        state = Text(" ● ON " if on else " ○ OFF ",
+                     style=f"bold #04140a on {color}" if on else "bold #8ba0b8 on #1b2533")
+        bar = meter(allowed, total) if on else Text("·" * 10, style="dim")
+        body = Text.assemble(bar, (f" {allowed}/{total} allowed", "dim"))
+        self.update(Text("\n").join([Text.assemble(head, "  ", state), body]))
+
+    def on_click(self) -> None:
+        self.app.action_toggle_cat(self.category)
+
+
+class Lane(Vertical):
+    """A boxed group of probes sharing one category."""
+
+    def __init__(self, category: str) -> None:
+        super().__init__(id=f"lane-{category}", classes="lane")
+        self.category = category
+        self.styles.border = ("heavy", cat_meta(category)[2])
+
+    def compose(self) -> ComposeResult:
+        table = DataTable(cursor_type="row", id=f"table-{self.category}")
+        table.add_columns(*COLUMNS)
+        yield table
+
+    @property
+    def table(self) -> DataTable:
+        return self.query_one(DataTable)
+
+    def summarize(self, allowed: int, denied: int, by_sandbox: int, total: int) -> None:
+        glyph, label, color = cat_meta(self.category)
+        sub = CATEGORY_SUBS.get(self.category, "")
+        self.border_title = f"[b {color}] {glyph} {label} [/][dim]{sub} [/]"
+        verdict = ("LOCKED DOWN", RED) if total and denied == total else \
+                  ("WIDE OPEN", GREEN) if total and allowed == total else ("PARTIAL", AMBER)
+        sandbox = f"[{SANDBOX}]◆ {by_sandbox} by sandbox[/] · " if by_sandbox else ""
+        self.border_subtitle = (f" {sandbox}[{GREEN}]{allowed} allowed[/] · [{RED}]{denied} denied[/]"
+                                f"  [b {verdict[1]}]{verdict[0]}[/] ")
+
+    def flash(self, kind: str) -> None:
+        self.styles.border = ("heavy", RED if kind == "lost" else GREEN)
+        self.add_class(f"flash-{kind}")
+
+        def done() -> None:
+            self.styles.border = ("heavy", cat_meta(self.category)[2])
+            self.remove_class(f"flash-{kind}")
+
+        self.set_timer(FLASH_SECONDS, done)
+
+
 class CanIApp(App):
     """Live sandbox capability dashboard for the terminal."""
 
@@ -98,8 +172,52 @@ class CanIApp(App):
         padding: 0 2;
         background: $boost;
     }
-    DataTable {
+    #switches {
+        height: auto;
+        padding: 0 1;
+    }
+    .switch {
+        width: 1fr;
+        height: auto;
+        padding: 0 1;
+        margin: 0 1;
+    }
+    .switch.off {
+        color: $text-muted;
+    }
+    #lanes {
         height: 1fr;
+        padding: 0 1;
+    }
+    .lane {
+        height: auto;
+        margin: 1 1 0 1;
+        padding: 0 1;
+        border-title-align: left;
+        border-subtitle-align: right;
+    }
+    .lane.flash-lost {
+        background: #e5484d 12%;
+    }
+    .lane.flash-gained {
+        background: #2fbf71 12%;
+    }
+    .lane DataTable {
+        height: auto;
+        max-height: 14;
+    }
+    /* only the box you're in shows a cursor row */
+    .lane DataTable:blur > .datatable--cursor {
+        background: transparent;
+        text-style: none;
+    }
+    .lane:focus-within {
+        background: $boost;
+    }
+    #all-hidden {
+        padding: 2 4;
+        color: $text-muted;
+        display: none;
     }
     #detail {
         height: 12;
@@ -114,9 +232,11 @@ class CanIApp(App):
         ("space", "run_probes", "Run probes"),
         ("a", "toggle_auto", "Auto"),
         ("b", "toggle_baseline", "Pin baseline"),
-        ("1", "toggle_cat('network')", "Network"),
-        ("2", "toggle_cat('filesystem')", "Files"),
-        ("3", "toggle_cat('process')", "Process"),
+        ("1", "toggle_cat_key(1)", "Network"),
+        ("2", "toggle_cat_key(2)", "Files"),
+        ("3", "toggle_cat_key(3)", "Process"),
+        *[(str(n), f"toggle_cat_key({n})", "") for n in range(4, 10)],
+        ("0", "show_all", "Show all"),
         ("q", "quit", "Quit"),
     ]
 
@@ -134,22 +254,51 @@ class CanIApp(App):
         self.updated: set[str] = set()  # probes that reported during the current run
         self.hidden: set[str] = set()
         self.auto = False
+        self.cats: list[str] = self._categories()
+
+    def _categories(self) -> list[str]:
+        present = {c.category for c in self.state.config.checks}
+        return [c for c in CATEGORIES if c in present] + sorted(present - CATEGORIES.keys())
+
+    def cat_key(self, category: str) -> int:
+        """Stable number key: built-ins keep 1-3 whatever the config contains."""
+        extras = sorted({c.category for c in self.state.config.checks} - CATEGORIES.keys())
+        return ([*CATEGORIES, *extras].index(category) + 1)
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(id="ribbon")
         yield Static(id="score")
-        yield DataTable(cursor_type="row")
+        with Horizontal(id="switches"):
+            for cat in self.cats:
+                yield CategorySwitch(cat, self.cat_key(cat))
+        with VerticalScroll(id="lanes"):
+            for cat in self.cats:
+                yield Lane(cat)
+            yield Static("all categories hidden — press [b]0[/] to show everything, or 1-3 to bring one back",
+                         id="all-hidden")
         yield Static("select a probe row to inspect stdout/stderr", id="detail")
         yield Footer()
 
     def on_mount(self) -> None:
-        table = self.query_one(DataTable)
-        table.add_columns("Status", "Δ", "Check", "Category", "Blocked by", "Exit", "Latency", "History")
         for result in self.state.results.values():
             self._ingest(result, live=False)
         self.refresh_table()
+        lanes = self.query(Lane)
+        if lanes:
+            lanes.first().table.focus()
         self._pump_task = asyncio.create_task(self._event_pump())
+
+    async def _rebuild_lanes(self) -> None:
+        """Config hot-reload changed the set of categories: rebuild boxes and switches."""
+        self.cats = self._categories()
+        self.hidden &= set(self.cats)
+        switches, lanes = self.query_one("#switches"), self.query_one("#lanes")
+        await switches.remove_children()
+        await switches.mount_all([CategorySwitch(c, self.cat_key(c)) for c in self.cats])
+        await lanes.remove_children(".lane")
+        await lanes.mount_all([Lane(c) for c in self.cats], before="#all-hidden")
+        self.refresh_table()
 
     def on_unmount(self) -> None:
         if self._pump_task:
@@ -167,6 +316,9 @@ class CanIApp(App):
             kind = "gained" if granted(status) else "lost"
             self.run_flips.append((kind, result))
             self._flash(result.id, kind)
+            for lane in self.query(Lane):
+                if lane.category == result.category:
+                    lane.flash(kind)
         h = self.hist.setdefault(result.id, [])
         h.append(status)
         del h[:-HISTORY]
@@ -226,15 +378,10 @@ class CanIApp(App):
         )
         if self.auto:
             line1.append(f"   ⟳ AUTO {self.state.config.settings.interval_seconds:g}s", style=f"bold {BLUE}")
-        line2 = Text()
-        for key, (cat, (glyph, label, color)) in enumerate(CATEGORIES.items(), start=1):
-            a, n = per.get(cat, [0, 0])
-            hidden = cat in self.hidden
-            line2.append(f"[{key}] ", style="dim")
-            line2.append(f"{glyph} {label} ", style="dim strike" if hidden else f"bold {color}")
-            line2.append_text(meter(a, n) if not hidden else Text("·" * 10, style="dim"))
-            line2.append(f" {a}/{n}   ", style="dim")
-        self.query_one("#score", Static).update(Text("\n").join([line1, line2]))
+        self.query_one("#score", Static).update(line1)
+        for switch in self.query(CategorySwitch):
+            a, n = per.get(switch.category, [0, 0])
+            switch.show(switch.category not in self.hidden, a, n)
 
     def refresh_table(self) -> None:
         snap = self.state.snapshot()
@@ -266,7 +413,30 @@ class CanIApp(App):
         self.query_one("#ribbon", Static).update(ribbon)
         self._render_score(snap["results"])
 
-        table = self.query_one(DataTable)
+        if self._categories() != self.cats:
+            self.call_later(self._rebuild_lanes)
+        running = self.state.running
+        rows: dict[str, list[dict]] = {}
+        for r in snap["results"]:
+            rows.setdefault(r["category"], []).append(r)
+        for lane in self.query(Lane):
+            lane.display = lane.category not in self.hidden
+            lane_rows = rows.get(lane.category, [])
+            allowed = denied = by_sandbox = 0
+            for r in lane_rows:
+                v = self.last.get(r["id"])
+                if v is None:
+                    continue
+                if granted(v):
+                    allowed += 1
+                else:
+                    denied += 1
+                    by_sandbox += (r.get("blocker") or {}).get("kind") == "sandbox"
+            lane.summarize(allowed, denied, by_sandbox, len(lane_rows))
+            self._fill_table(lane.table, lane_rows, running)
+        self.query_one("#all-hidden").display = bool(self.cats) and all(c in self.hidden for c in self.cats)
+
+    def _fill_table(self, table: DataTable, rows: list[dict], running: bool) -> None:
         cursor_key = None
         if table.row_count:
             try:
@@ -274,10 +444,7 @@ class CanIApp(App):
             except Exception:  # cursor outside the table
                 cursor_key = None
         table.clear()
-        running = self.state.running
-        for r in snap["results"]:
-            if r["category"] in self.hidden:
-                continue
+        for r in rows:
             pid = r["id"]
             last = self.last.get(pid)
             if last is None:
@@ -300,7 +467,6 @@ class CanIApp(App):
                 status,
                 delta_cell(self.delta(pid)),
                 name,
-                category_cell(r["category"]),
                 blocker_cell(blocker),
                 str(r["exit_code"]) if r["exit_code"] is not None else "—",
                 latency,
@@ -319,7 +485,21 @@ class CanIApp(App):
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         if event.row_key is None or event.row_key.value is None:
             return
-        result = self.state.results.get(str(event.row_key.value))
+        if event.data_table.has_focus:
+            self.show_detail(str(event.row_key.value))
+
+    def on_descendant_focus(self, event) -> None:
+        # tabbing into another category box: inspect the row its cursor is on
+        table = event.widget
+        if isinstance(table, DataTable) and table.row_count:
+            try:
+                key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
+            except Exception:  # cursor outside the table
+                return
+            self.show_detail(str(key))
+
+    def show_detail(self, probe_id: str) -> None:
+        result = self.state.results.get(probe_id)
         if result is None:
             return
         detail = Text.assemble(
@@ -385,7 +565,25 @@ class CanIApp(App):
         self.refresh_table()
 
     def action_toggle_cat(self, category: str) -> None:
+        if category not in self.cats:
+            return
         self.hidden.symmetric_difference_update({category})
+        _, label, _ = cat_meta(category)
+        self.notify(f"{label} {'hidden' if category in self.hidden else 'shown'}", timeout=1.5)
+        self.refresh_table()
+        focused = self.focused
+        if focused is None or not focused.display or not focused.parent.display:
+            visible = [lane for lane in self.query(Lane) if lane.display]
+            if visible:
+                visible[0].table.focus()
+
+    def action_toggle_cat_key(self, key: int) -> None:
+        for cat in self.cats:
+            if self.cat_key(cat) == key:
+                self.action_toggle_cat(cat)
+
+    def action_show_all(self) -> None:
+        self.hidden.clear()
         self.refresh_table()
 
     def _summarize_run(self) -> None:
