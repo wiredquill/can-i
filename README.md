@@ -110,10 +110,16 @@ openshell sandbox create --name can-i \
   --policy examples/policy-to-run-can-i.yaml \
   --detach -- can-i web --host 0.0.0.0 --port 8000
 
-# or attach a terminal and drive the TUI yourself
+# the sandbox does NOT publish :8000 — forward it out, then browse to
+# http://<host-running-this-cli>:8477 (not :8000)
+openshell forward service --target-port 8000 --local 0.0.0.0:8477 can-i
+
+# or attach a terminal and drive the TUI yourself — the trailing command is
+# required: without it OpenShell drops you into a shell, not the image entrypoint
 openshell sandbox create --name can-i-tui \
   --from ghcr.io/wiredquill/can-i:latest \
-  --policy examples/policy-to-run-can-i.yaml
+  --policy examples/policy-to-run-can-i.yaml \
+  -- can-i tui
 ```
 
 [`examples/policy-to-run-can-i.yaml`](examples/policy-to-run-can-i.yaml) is the minimal grant
@@ -150,12 +156,10 @@ You can also bake a policy into an image at `/etc/openshell/policy.yaml`; a `--p
 or `OPENSHELL_SANDBOX_POLICY` takes precedence.
 
 Note: the web UI on :8000 is *inbound* traffic — sandbox policies govern egress and
-filesystem, not port publishing. Forward it out of the sandbox instead:
-
-```bash
-openshell forward service --target-port 8000 --local 0.0.0.0:8477 can-i
-# dashboard now on http://<host>:8477 — served from INSIDE the sandbox
-```
+filesystem, not port publishing. That's why the `openshell forward service` step above is
+required; the dashboard on :8477 is served from INSIDE the sandbox. If it still doesn't load,
+check the host firewall allows :8477 and that the web workload is up
+(`openshell sandbox connect can-i`, then `curl -s localhost:8000 | head`).
 
 Verified on OpenShell v0.1.5 (docker driver): `can-i run` in the sandbox reports
 **12/12 expectations met** — suse.com/DNS and /tmp allowed; metadata denied (OpenShell egress);

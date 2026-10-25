@@ -23,8 +23,11 @@ filesystem_policy:
     - /lib64
     - /etc
   # /tmp is the only write can-i needs (fs-write-tmp / fs-exec-tmp probes).
+  # /home/cani is the image's WORKDIR/$HOME — without it, shells and the TUI
+  # hit EACCES on ~/.bashrc, ~/.profile and any dotfile writes.
   read_write:
     - /tmp
+    - /home/cani
 
 process:
   # must name an identity that exists in the image: the can-i image ships
