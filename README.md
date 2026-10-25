@@ -174,12 +174,20 @@ To see Landlock itself refuse, probe a path the mode bits allow but the policy o
 ```
 can-i run  [--config checks.yaml] [--json]   # one-shot probe report (exit 0)
 can-i tui  [--config checks.yaml]            # terminal UI (r/space run, a auto, b baseline, 1-3 show/hide category, 0 show all, tab next box, q quit)
+can-i tui --stage                            # full-screen presenter view (toggle with s inside the TUI)
 can-i web  [--config checks.yaml] [--host 0.0.0.0] [--port 8000]
 can-i from-policy POLICY.yaml [-o checks.yaml]  # OpenShell policy -> test plan
 can-i to-policy [--config checks.yaml]          # checks.yaml -> OpenShell policy
 ```
 
 `CAN_I_CONFIG` overrides the default config path everywhere.
+
+**Stage mode** (`can-i tui --stage`, or `s` in the TUI) is built for presenting from a plain
+terminal — e.g. `kubectl exec -it <pod> -- can-i tui --stage` — with no browser or port-forward.
+It shows one big tile per category with the agent's allowed actions, a banner announcing
+**ACCESS GRANTED / REVOKED** as you change the policy, big totals vs. the pinned baseline (`b`),
+and a trend line of allowed actions per run. The category switches (1-3, 0) work here too, and
+on short terminals the totals and trend fold away so the tiles keep their room.
 
 ### OpenShell policy interop (both directions)
 
