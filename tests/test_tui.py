@@ -102,3 +102,62 @@ async def test_row_selection_shows_detail_panel(state):
         detail = str(app.query_one("#detail").render())
         assert "Always denied" in detail
         assert "exit" in detail.lower()
+
+
+async def _run_and_settle(app, state, pilot):
+    await state.run_now()
+    for _ in range(20):
+        await pilot.pause()
+
+
+async def test_flip_shows_lost_delta_and_notifies(state, tmp_path):
+    app = CanIApp(state)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await _run_and_settle(app, state, pilot)
+        assert "LOST" not in cell_text(app)
+        # policy change: the always-allowed probe now fails
+        state.update_config(YAML.replace("command: 'true'", "command: 'false'"))
+        await _run_and_settle(app, state, pilot)
+        assert "▼ LOST" in cell_text(app)
+        assert any("LOCKED DOWN" in str(n.message) for n in app._notifications)
+
+
+async def test_baseline_keeps_delta_across_runs(state):
+    app = CanIApp(state)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await _run_and_settle(app, state, pilot)
+        await pilot.press("b")
+        state.update_config(YAML.replace("command: 'true'", "command: 'false'"))
+        await _run_and_settle(app, state, pilot)
+        await _run_and_settle(app, state, pilot)  # second run: still lost vs baseline
+        assert "▼ LOST" in cell_text(app)
+        await pilot.press("b")  # clear: last run had the same verdict, so no delta
+        await pilot.pause()
+        assert "LOST" not in cell_text(app)
+
+
+async def test_category_filter_hides_rows(state):
+    app = CanIApp(state)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("2")  # filesystem
+        await pilot.pause()
+        assert "Always denied" not in cell_text(app)
+        assert "Always allowed" in cell_text(app)
+        await pilot.press("2")
+        await pilot.pause()
+        assert "Always denied" in cell_text(app)
+
+
+async def test_category_and_blocker_columns(state):
+    app = CanIApp(state)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await _run_and_settle(app, state, pilot)
+        text = cell_text(app)
+        assert "FILESYSTEM" in text and "PROCESS" in text
+        assert "exit 1" in text  # 'false' has no recognizable denial signal
+        score = str(app.query_one("#score").render())
+        assert "by sandbox" in score
