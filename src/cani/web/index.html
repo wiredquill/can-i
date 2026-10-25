@@ -6,127 +6,286 @@
 <title>can-i — sandbox capability inspector</title>
 <style>
   :root {
-    --bg: #0b0f14; --panel: #111823; --panel2: #16202e; --border: #233247;
-    --fg: #dbe4ee; --muted: #8ba0b8; --accent: #30b566;
+    --bg: #080b10; --panel: #0f151e; --panel2: #141d29; --border: #213044;
+    --fg: #dbe4ee; --muted: #8ba0b8; --dim: #5a6b80; --accent: #30b566;
     --green: #2fbf71; --red: #e5484d; --amber: #f5a524; --blue: #4c9aff;
+    --c-network: #4c9aff; --c-filesystem: #bc8cff; --c-process: #22d3ee;
+    --sandbox: #f472b6;  /* denial enforced by the sandbox policy itself */
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", monospace;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
          font: 14px/1.5 "Inter", "Segoe UI", system-ui, sans-serif; }
-  header { padding: 14px 22px; display: flex; align-items: center; gap: 14px;
-           border-bottom: 1px solid var(--border); background: var(--panel); }
-  header h1 { font-size: 18px; margin: 0; letter-spacing: .5px; }
-  header h1 .q { color: var(--accent); }
+  svg.i { width: 1em; height: 1em; vertical-align: -0.15em; fill: none; stroke: currentColor;
+          stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* ---- header + ribbon ---- */
+  header.top { padding: 14px 22px; display: flex; align-items: center; gap: 14px;
+               border-bottom: 1px solid var(--border); background: var(--panel); }
+  header.top h1 { font-size: 18px; margin: 0; letter-spacing: .5px; }
+  header.top h1 .q { color: var(--accent); }
+  header.top h1 small { color: var(--muted); font-weight: 500; font-size: 13px; margin-left: 6px; }
   #conn { margin-left: auto; font-size: 12px; color: var(--muted); }
   #conn.live { color: var(--green); }
 
-  #ribbon { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 22px;
+  #ribbon { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 22px;
             background: var(--panel2); border-bottom: 1px solid var(--border); }
   .chip { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-          padding: 4px 10px; font-size: 12px; color: var(--muted); }
+          padding: 3px 10px; font-size: 12px; color: var(--muted); }
   .chip b { color: var(--fg); font-weight: 600; }
+  .chip.warn { border-color: rgba(245,165,36,.5); }
   .chip.warn b { color: var(--amber); }
 
-  #toolbar { display: flex; gap: 10px; padding: 14px 22px; align-items: center; }
+  /* ---- hero scoreboard ---- */
+  #hero { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(280px, 1.6fr);
+          gap: 12px; padding: 16px 22px 4px; }
+  .score { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+           padding: 12px 16px; position: relative; overflow: hidden; }
+  .score .n { font-size: 40px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .score .l { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+              display: flex; align-items: center; gap: 6px; }
+  .score.allowed .n { color: var(--green); }
+  .score.denied  .n { color: var(--red); }
+  .score.drift   .n { color: var(--amber); }
+  .score.delta   .n { color: var(--fg); }
+  .score.delta .n .up { color: var(--green); } .score.delta .n .dn { color: var(--red); }
+  .score.delta .n .sep { color: var(--dim); font-weight: 400; margin: 0 4px; }
+  .score.bump { animation: bump .5s ease; }
+  @keyframes bump { 30% { transform: scale(1.06); } }
+  .score::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
+  .score.allowed::after { background: var(--green); } .score.denied::after { background: var(--red); }
+  .score.drift::after { background: var(--amber); } .score.delta::after { background: linear-gradient(90deg, var(--green), var(--red)); }
+  #posture { height: 6px; border-radius: 99px; background: var(--panel2); overflow: hidden;
+             display: flex; margin: 8px 22px 0; }
+  #posture span { transition: width .4s ease; }
+
+  #feed { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+          padding: 10px 12px; display: flex; flex-direction: column; min-height: 0; max-height: 112px; }
+  #feed h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em;
+             color: var(--muted); display: flex; justify-content: space-between; }
+  #feed h3 a { color: var(--dim); cursor: pointer; text-transform: none; letter-spacing: 0; }
+  #feed ol { list-style: none; margin: 0; padding: 0; overflow-y: auto; font-size: 12px; }
+  #feed li { display: flex; gap: 8px; align-items: center; padding: 2px 0; white-space: nowrap; }
+  #feed li .t { color: var(--dim); font-family: var(--mono); font-size: 11px; }
+  #feed li .nm { overflow: hidden; text-overflow: ellipsis; }
+  #feed li.lost .tag { color: var(--red); } #feed li.gained .tag { color: var(--green); }
+  #feed li .tag { font-weight: 800; font-size: 11px; letter-spacing: .05em; }
+  #feed li.fresh { animation: feedin .6s ease; }
+  @keyframes feedin { from { background: rgba(255,255,255,.08); transform: translateX(-6px); } }
+  #feed .empty { color: var(--dim); font-size: 12px; }
+
+  /* ---- toolbar ---- */
+  #toolbar { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 22px; align-items: center; }
   button { background: var(--accent); color: #04140a; border: 0; border-radius: 6px;
-           padding: 8px 16px; font-weight: 700; cursor: pointer; }
+           padding: 8px 16px; font-weight: 700; cursor: pointer; font: inherit; font-weight: 700;
+           display: inline-flex; align-items: center; gap: 6px; }
   button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+  button.ghost:hover { border-color: var(--muted); }
+  button.ghost.on { border-color: var(--accent); color: var(--accent); background: rgba(48,181,102,.08); }
   button:disabled { opacity: .5; cursor: default; }
-  #statusline { color: var(--muted); font-size: 12px; }
+  #run.busy { background: var(--blue); color: #04101f; opacity: 1; }
+  #run.busy svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sep-v { width: 1px; align-self: stretch; background: var(--border); }
+  #filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #filters .lbl, #statusline { color: var(--muted); font-size: 12px; }
+  .flt { background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+         border-radius: 999px; padding: 4px 12px; font-size: 12px; opacity: .5; }
+  .flt.on { opacity: 1; color: var(--cc); border-color: var(--cc); background: color-mix(in srgb, var(--cc) 10%, transparent); }
+  #baseline-chip { display: none; }
+  #baseline-chip.show { display: inline-flex; align-items: center; gap: 6px; }
+  #baseline-chip a { cursor: pointer; color: var(--dim); }
 
-  main { display: grid; grid-template-columns: 1fr; gap: 0; padding: 0 22px 30px; }
-  @media (min-width: 1100px) { main.editing { grid-template-columns: 1fr 460px; gap: 18px; } }
+  /* ---- lanes ---- */
+  main { display: grid; grid-template-columns: 1fr; gap: 18px; padding: 0 22px 30px; }
+  @media (min-width: 1100px) { main.editing { grid-template-columns: 1fr 460px; } }
+  #lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;
+           align-items: start; }
+  .lane { --cc: var(--muted); background: var(--panel); border: 1px solid var(--border);
+          border-top: 3px solid var(--cc); border-radius: 10px; overflow: hidden; }
+  .lane.hidden { display: none; }
+  .lane > header { display: flex; align-items: center; gap: 10px; padding: 12px 14px 8px; }
+  .lane > header .ico { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;
+                        color: var(--cc); background: color-mix(in srgb, var(--cc) 14%, transparent);
+                        font-size: 18px; }
+  .lane > header h2 { margin: 0; font-size: 14px; letter-spacing: .04em; color: var(--cc); text-transform: uppercase; }
+  .lane > header .sub { font-size: 11px; color: var(--muted); }
+  .lane > header .frac { margin-left: auto; text-align: right; font-variant-numeric: tabular-nums; }
+  .lane > header .frac b { font-size: 20px; color: var(--fg); }
+  .lane > header .frac span { color: var(--muted); font-size: 12px; }
+  .meter { display: flex; height: 4px; margin: 0 14px 10px; border-radius: 99px; overflow: hidden; background: var(--panel2); }
+  .meter i { display: block; transition: width .4s ease; }
+  .meter i.a { background: var(--green); } .meter i.d { background: var(--red); } .meter i.e { background: var(--amber); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 0 10px 12px; }
 
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase;
-       letter-spacing: .08em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-  td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-  tr.probe { cursor: pointer; }
-  tr.probe:hover { background: var(--panel2); }
+  /* ---- probe cards ---- */
+  .card { --sc: var(--dim); position: relative; display: grid; grid-template-columns: 38px 1fr auto;
+          gap: 4px 10px; align-items: center; padding: 10px 12px 10px 10px; cursor: pointer;
+          background: var(--panel2); border: 1px solid var(--border); border-left: 4px solid var(--sc);
+          border-radius: 8px; transition: background .3s, border-color .3s; overflow: hidden; }
+  .card:hover { border-color: var(--muted); border-left-color: var(--sc); }
+  .card.allowed { --sc: var(--green); background: linear-gradient(90deg, rgba(47,191,113,.10), var(--panel2) 55%); }
+  .card.denied  { --sc: var(--red);
+                  background: repeating-linear-gradient(135deg, rgba(229,72,77,.05) 0 8px, transparent 8px 16px),
+                              linear-gradient(90deg, rgba(229,72,77,.12), var(--panel2) 55%); }
+  .card.error   { --sc: var(--amber); background: linear-gradient(90deg, rgba(245,165,36,.10), var(--panel2) 55%); }
+  .card .st { grid-row: span 2; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+              font-size: 19px; color: var(--sc); background: color-mix(in srgb, var(--sc) 15%, transparent);
+              border: 1px solid color-mix(in srgb, var(--sc) 50%, transparent); }
+  .card .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .cmd { grid-column: 2; font-family: var(--mono); font-size: 11px; color: var(--dim);
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .cmd.wide { grid-column: 2 / 4; }
+  .card .verdict { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--sc); text-align: right; }
+  .card .meta { grid-column: 1 / 4; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted);
+                border-top: 1px dashed var(--border); padding-top: 6px; margin-top: 2px; }
+  .card .meta .exp-ok { color: var(--green); }
+  .card .meta .exp-bad { color: #08080a; background: var(--amber); padding: 0 6px; border-radius: 4px; font-weight: 800; }
+  .card .hist { margin-left: auto; display: flex; gap: 3px; }
+  .card .hist i { width: 7px; height: 7px; border-radius: 2px; background: var(--border); }
+  .card .hist i.allowed { background: var(--green); } .card .hist i.denied { background: var(--red); }
+  .card .hist i.error { background: var(--amber); }
+  .card .blkcell { justify-self: end; }
+  .blk { display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 4px;
+         font-weight: 700; font-size: 10.5px; letter-spacing: .03em; white-space: nowrap; line-height: 18px; }
+  .blk.sandbox { background: color-mix(in srgb, var(--sandbox) 16%, transparent); color: var(--sandbox);
+                 border: 1px solid color-mix(in srgb, var(--sandbox) 55%, transparent); }
+  .blk.baseline { color: var(--muted); border: 1px solid var(--border); }
+  .blk.unknown { color: var(--muted); border: 1px dashed var(--border); }
+  .score .sub { font-size: 11px; color: var(--muted); margin-top: 2px; min-height: 16px; }
+  .score .sub b { color: var(--sandbox); }
+  .dbadge { position: absolute; top: 0; right: 0; font-size: 10px; font-weight: 800; letter-spacing: .08em;
+           padding: 2px 8px 2px 10px; border-bottom-left-radius: 8px; display: flex; align-items: center; gap: 4px; }
+  .dbadge.lost { background: var(--red); color: #fff; }
+  .dbadge.gained { background: var(--green); color: #04140a; }
+  .card.has-delta .verdict { margin-top: 12px; }
 
-  .badge { display: inline-block; min-width: 86px; text-align: center; padding: 3px 10px;
-           border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
-  .badge.allowed { background: rgba(47,191,113,.15); color: var(--green); border: 1px solid var(--green); }
-  .badge.denied  { background: rgba(229,72,77,.15);  color: var(--red);   border: 1px solid var(--red); }
-  .badge.error   { background: rgba(245,165,36,.15); color: var(--amber); border: 1px solid var(--amber); }
-  .badge.running { background: rgba(76,154,255,.15); color: var(--blue);  border: 1px solid var(--blue);
-                   animation: pulse 1s ease-in-out infinite; }
+  /* running: keep last verdict visible, dimmed, with a scanning bar */
+  .card.running { opacity: .7; }
+  .card.running .st { animation: pulse 1s ease-in-out infinite; }
+  .card.running::before { content: ""; position: absolute; top: 0; left: -40%; width: 40%; height: 2px;
+                          background: linear-gradient(90deg, transparent, var(--blue), transparent);
+                          animation: scan 1.1s linear infinite; }
+  .card.pending { --sc: var(--dim); }
   @keyframes pulse { 50% { opacity: .35; } }
+  @keyframes scan { to { left: 100%; } }
 
-  .cat { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
-  .cat::before { content: "●"; margin-right: 6px; }
-  .cat-network   { color: #4c9aff; }
-  .cat-filesystem{ color: #bc8cff; }
-  .cat-process   { color: #39c5cf; }
-  tr.probe.cat-row-network    { border-left: 3px solid #4c9aff; }
-  tr.probe.cat-row-filesystem { border-left: 3px solid #bc8cff; }
-  tr.probe.cat-row-process    { border-left: 3px solid #39c5cf; }
-  .cmd { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 12px; color: var(--muted); }
+  /* the money shot: access flips */
+  .card.flip-lost { animation: slam .7s cubic-bezier(.3,1.6,.5,1), flash-red 1.8s ease-out; }
+  .card.flip-gained { animation: rise .7s ease-out, flash-green 1.8s ease-out; }
+  .card.flip-lost .st, .card.flip-gained .st { animation: pop .6s ease; }
+  @keyframes slam { 0% { transform: translateX(0); } 15% { transform: translateX(-7px); } 30% { transform: translateX(6px); }
+                    45% { transform: translateX(-4px); } 60% { transform: translateX(3px); } 100% { transform: none; } }
+  @keyframes rise { 0% { transform: scale(.97); } 40% { transform: scale(1.03); } 100% { transform: none; } }
+  @keyframes flash-red { 0% { box-shadow: 0 0 0 2px var(--red), 0 0 28px 4px rgba(229,72,77,.7); }
+                         100% { box-shadow: 0 0 0 0 transparent; } }
+  @keyframes flash-green { 0% { box-shadow: 0 0 0 2px var(--green), 0 0 28px 4px rgba(47,191,113,.7); }
+                           100% { box-shadow: 0 0 0 0 transparent; } }
+  @keyframes pop { 0% { transform: scale(.4) rotate(-20deg); } 60% { transform: scale(1.25); } 100% { transform: none; } }
 
-  #filters { display: flex; gap: 8px; align-items: center; }
-  #filters .lbl { color: var(--muted); font-size: 12px; margin-right: 2px; }
-  .flt { background: var(--panel2); border: 1px solid var(--border); color: var(--fg);
-         border-radius: 999px; padding: 4px 14px; font-size: 12px; font-weight: 700;
-         cursor: pointer; opacity: .45; }
-  .flt.on { opacity: 1; }
-  .flt.f-network.on    { border-color: #4c9aff; color: #4c9aff; }
-  .flt.f-filesystem.on { border-color: #bc8cff; color: #bc8cff; }
-  .flt.f-process.on    { border-color: #39c5cf; color: #39c5cf; }
+  /* ---- toasts ---- */
+  #toasts { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 20;
+            display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+  .toast { pointer-events: auto; padding: 12px 20px; border-radius: 10px; font-weight: 800; font-size: 15px;
+           display: flex; align-items: center; gap: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5);
+           animation: toastin .35s cubic-bezier(.2,1.4,.4,1); }
+  .toast.lost { background: var(--red); color: #fff; }
+  .toast.gained { background: var(--green); color: #04140a; }
+  .toast.info { background: var(--panel2); color: var(--fg); border: 1px solid var(--border); font-weight: 600; }
+  .toast.out { animation: toastout .3s ease forwards; }
+  @keyframes toastin { from { transform: translateY(-30px) scale(.9); opacity: 0; } }
+  @keyframes toastout { to { transform: translateY(-20px); opacity: 0; } }
 
+  /* ---- drawer ---- */
   #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 92vw);
             background: var(--panel); border-left: 1px solid var(--border);
             transform: translateX(100%); transition: transform .18s ease;
             padding: 20px; overflow-y: auto; z-index: 10; }
-  #drawer.open { transform: translateX(0); }
-  #drawer h2 { margin-top: 0; font-size: 16px; }
+  #drawer.open { transform: translateX(0); box-shadow: -20px 0 60px rgba(0,0,0,.5); }
+  #drawer h2 { margin: 0 0 4px; font-size: 17px; }
+  #drawer .catline { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+                     display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+  #drawer .bigstat { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px;
+                     background: color-mix(in srgb, var(--sc) 12%, transparent);
+                     border: 1px solid color-mix(in srgb, var(--sc) 45%, transparent); color: var(--sc);
+                     font-weight: 800; letter-spacing: .06em; font-size: 16px; margin-bottom: 14px; }
+  #drawer .bigstat svg { font-size: 26px; }
+  #drawer .bigstat small { color: var(--muted); font-weight: 500; letter-spacing: 0; font-size: 12px; margin-left: auto; }
   #drawer dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 13px; }
   #drawer dt { color: var(--muted); }
+  #drawer dd { margin: 0; word-break: break-word; }
   #drawer pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
                 padding: 10px; font-size: 12px; white-space: pre-wrap; word-break: break-word;
-                max-height: 220px; overflow: auto; }
+                max-height: 220px; overflow: auto; font-family: var(--mono); }
+  #drawer .hist { display: flex; gap: 4px; flex-wrap: wrap; }
+  #drawer .hist i { width: 14px; height: 14px; border-radius: 3px; background: var(--border); }
+  #drawer .hist i.allowed { background: var(--green); } #drawer .hist i.denied { background: var(--red); }
+  #drawer .hist i.error { background: var(--amber); }
 
+  /* ---- editor ---- */
   #editor { display: none; flex-direction: column; background: var(--panel);
-            border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+            border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
             height: fit-content; position: sticky; top: 16px; }
   main.editing #editor { display: flex; }
   #editor header { padding: 10px 14px; font-weight: 700; font-size: 13px; }
   #yaml { width: 100%; height: 480px; background: var(--bg); color: var(--fg);
           border: 0; border-top: 1px solid var(--border); padding: 12px; resize: vertical;
-          font: 12px/1.5 ui-monospace, "Cascadia Code", monospace; }
-  #editor .row { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
+          font: 12px/1.5 var(--mono); }
+  #editor .row { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
   #cfgerr { color: var(--red); font-size: 12px; padding: 0 14px 10px; white-space: pre-wrap; }
+
+  @media (max-width: 1000px) {
+    #hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #feed { grid-column: 1 / -1; }
+  }
+  @media (max-width: 600px) {
+    header.top, #ribbon, #toolbar { padding-left: 16px; padding-right: 16px; }
+    #hero, main { padding-left: 16px; padding-right: 16px; }
+    #posture { margin: 8px 16px 0; }
+    header.top h1 small { display: none; }
+    .score .n { font-size: 30px; }
+    #lanes { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>can-i<span class="q">?</span> — sandbox capability inspector</h1>
+<header class="top">
+  <h1>can-i<span class="q">?</span><small>sandbox capability inspector</small></h1>
   <span id="conn">connecting…</span>
 </header>
 
 <div id="ribbon"></div>
 
+<section id="hero">
+  <div class="score allowed" id="s-allowed"><div class="n">–</div><div class="l" data-icon="unlock">Allowed</div></div>
+  <div class="score denied" id="s-denied"><div class="n">–</div><div class="l" data-icon="lock">Denied</div>
+    <div class="sub" id="denied-split" title="Who said no: the sandbox policy, or the environment (would be denied anyway)"></div></div>
+  <div class="score drift" id="s-drift" title="Checks whose result differs from their 'expect:' value">
+    <div class="n">–</div><div class="l" data-icon="alert">Expectation drift</div></div>
+  <div class="score delta" id="s-delta" title="Access gained / lost">
+    <div class="n">–</div><div class="l" data-icon="swap" id="delta-label">Since last run</div></div>
+  <div id="feed"><h3><span>Access changes</span><a id="clear-feed">clear</a></h3><ol id="feed-list"></ol></div>
+</section>
+<div id="posture" title="Overall posture: allowed vs denied"></div>
+
 <div id="toolbar">
-  <button id="run">▶ Run Probes</button>
-  <button class="ghost" id="toggle-editor">✎ checks.yaml</button>
-  <div id="filters">
-    <span class="lbl">Views:</span>
-    <button class="flt f-network on" data-cat="network">Network</button>
-    <button class="flt f-filesystem on" data-cat="filesystem">Filesystem</button>
-    <button class="flt f-process on" data-cat="process">Process</button>
-    <span class="lbl" id="shown-count"></span>
-  </div>
+  <button id="run"><span data-icon="play"></span><span class="lbl">Run Probes</span></button>
+  <button class="ghost" id="auto" title="Re-run probes continuously"><span data-icon="repeat"></span><span class="lbl">Auto</span></button>
+  <button class="ghost" id="pin" title="Remember the current results; every card then shows what changed against them"><span data-icon="pin"></span>Pin baseline</button>
+  <span class="chip" id="baseline-chip"></span>
+  <button class="ghost" id="sound" title="Audible cue when access flips"><span data-icon="mute"></span></button>
+  <span class="sep-v"></span>
+  <div id="filters"><span class="lbl">Views:</span></div>
+  <span class="sep-v"></span>
+  <button class="ghost" id="toggle-editor"><span data-icon="edit"></span>checks.yaml</button>
   <span id="statusline"></span>
 </div>
 
 <main id="main">
-  <div>
-    <table>
-      <thead><tr>
-        <th>Status</th><th>Check</th><th>Category</th><th>Command</th><th>Expected</th><th>Exit</th><th>Latency</th>
-      </tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-  </div>
+  <div id="lanes"></div>
 
   <div id="editor">
     <header>checks.yaml — live editor</header>
@@ -145,15 +304,73 @@
 </main>
 
 <aside id="drawer"></aside>
+<div id="toasts"></div>
 
 <script>
 const $ = (s) => document.querySelector(s);
-let probes = new Map();   // id -> result object
-let order = [];           // stable display order
-const hiddenCats = new Set();  // categories toggled off in the Views filter
-
+const $$ = (s) => document.querySelectorAll(s);
 function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
 
+// ---- icons (inline, stroke-based) ----
+const ICONS = {
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8"/>',
+  cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/><path d="M10 10h4v4h-4z"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/>',
+  alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+  spin: '<path d="M12 3a9 9 0 1 0 9 9"/>',
+  dot: '<circle cx="12" cy="12" r="3"/>',
+  swap: '<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>',
+  up: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  down: '<path d="M12 5v14M5 12l7 7 7-7"/>',
+  play: '<path d="M7 4v16l13-8z"/>',
+  repeat: '<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/>',
+  pin: '<path d="M12 17v5M5 17h14l-2-4V5h1V3H6v2h1v8z"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/>',
+  mute: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>',
+  minus: '<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
+};
+const icon = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
+function hydrateIcons(root = document) {
+  root.querySelectorAll("[data-icon]").forEach((el) => {
+    el.insertAdjacentHTML("afterbegin", icon(el.dataset.icon)); el.removeAttribute("data-icon");
+  });
+}
+
+const CATS = {
+  network:    { label: "Network",    sub: "egress · DNS · sockets",   icon: "globe" },
+  filesystem: { label: "Filesystem", sub: "read · write · exec",      icon: "folder" },
+  process:    { label: "Process",    sub: "spawn · namespaces · privesc", icon: "cpu" },
+};
+const catMeta = (c) => CATS[c] || { label: c, sub: "", icon: "dot" };
+const STATUS_ICON = { allowed: "unlock", denied: "lock", error: "alert", running: "spin", pending: "dot" };
+const isFinal = (s) => s === "allowed" || s === "denied" || s === "error";
+const granted = (s) => s === "allowed";
+
+// ---- persistent client memory (survives reloads and server/sandbox restarts) ----
+const STORE_KEY = "cani.v1";
+function loadStore() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; }
+}
+const store = Object.assign({ last: {}, prev: {}, hist: {}, baseline: null, feed: [], sound: false }, loadStore());
+function saveStore() { try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch {} }
+
+let probes = new Map();       // id -> latest result from the server
+let order = [];
+let system = null;
+let interval = 3;
+let running = false;
+let auto = false, autoTimer = null;
+const prev = store.prev;      // id -> verdict before the latest result (the "since last run" reference)
+let runFlips = [];            // flips observed during the current run
+const hiddenCats = new Set();
+let laneKey = "";
+
+// ---- ribbon ----
 function renderRibbon(sys) {
   if (!sys) return;
   const caps = (sys.capabilities || []).slice(0, 6).join(", ") +
@@ -173,70 +390,233 @@ function renderRibbon(sys) {
   `<span class="chip${sys.sandboxed ? " warn" : ""}">Sandboxed: <b>${sys.sandboxed ? "YES" : "no"}</b></span>`;
 }
 
-function expectCell(p) {
-  if (!p.expect) return '<span style="color:var(--muted)">—</span>';
-  if (p.status === "running" || p.met === null || p.met === undefined)
-    return `<span style="color:var(--muted)">expect ${p.expect.toUpperCase()}</span>`;
-  return p.met
-    ? `<span style="color:var(--green)">✓ ${p.expect.toUpperCase()}</span>`
-    : `<span style="color:var(--amber);font-weight:800">✗ expected ${p.expect.toUpperCase()}</span>`;
+// ---- verdicts & deltas ----
+// What the card shows: the server's status, or the last known verdict while a probe is running.
+function verdictOf(id) {
+  const p = probes.get(id);
+  if (p && isFinal(p.status)) return p.status;
+  return store.last[id] || null;
+}
+// Which layer said no — only meaningful while the shown verdict is a denial.
+function blockerOf(id) {
+  const p = probes.get(id), v = verdictOf(id);
+  return v && !granted(v) ? p?.blocker || null : null;
+}
+const KIND_LABEL = { sandbox: "enforced by the sandbox", baseline: "denied without a sandbox too", unknown: "cause unclear" };
+function blkTag(b) {
+  return `<span class="blk ${esc(b.kind)}" title="${esc(KIND_LABEL[b.kind] || "")}: ${esc(b.reason)}">${icon(b.kind === "sandbox" ? "shield" : "minus")}${esc(b.layer)}</span>`;
+}
+function referenceOf(id) { return store.baseline ? store.baseline.status[id] : prev[id]; }
+function deltaOf(id) {
+  const cur = verdictOf(id), ref = referenceOf(id);
+  if (!cur || !ref || granted(cur) === granted(ref)) return null;
+  return granted(cur) ? "gained" : "lost";
 }
 
-function renderTable() {
-  let shown = 0, total = 0;
-  $("#rows").innerHTML = order.map((id) => {
-    const p = probes.get(id); if (!p) return "";
-    total++;
-    if (hiddenCats.has(p.category)) return "";
-    shown++;
-    return `<tr class="probe cat-row-${esc(p.category)}" data-id="${esc(id)}">
-      <td><span class="badge ${p.status}">${p.status.toUpperCase()}</span></td>
-      <td>${esc(p.name)}</td>
-      <td><span class="cat cat-${esc(p.category)}">${esc(p.category)}</span></td>
-      <td><span class="cmd">${esc(p.command || "")}</span></td>
-      <td>${expectCell(p)}</td>
-      <td>${p.exit_code ?? "—"}</td>
-      <td>${p.latency_ms ? Math.round(p.latency_ms) + " ms" : "—"}</td>
-    </tr>`;
+// ---- lanes (structure built once per config; cards patched in place so animations survive) ----
+function buildLanes() {
+  const cats = [...new Set([...Object.keys(CATS), ...order.map((id) => probes.get(id)?.category)])].filter(Boolean);
+  const key = cats.join(",") + "|" + order.join(",");
+  if (key === laneKey) return;
+  laneKey = key;
+  $("#lanes").innerHTML = cats.map((c) => {
+    const m = catMeta(c);
+    return `<section class="lane" data-cat="${esc(c)}" style="--cc: var(--c-${esc(c)}, var(--muted))">
+      <header><div class="ico">${icon(m.icon)}</div>
+        <div><h2>${esc(m.label)}</h2><div class="sub">${esc(m.sub)}</div></div>
+        <div class="frac"></div></header>
+      <div class="meter"><i class="a"></i><i class="e"></i><i class="d"></i></div>
+      <div class="cards">${order.filter((id) => probes.get(id)?.category === c)
+        .map((id) => `<article class="card" data-id="${esc(id)}"></article>`).join("")}</div>
+    </section>`;
   }).join("");
-  $("#shown-count").textContent = hiddenCats.size ? `${shown}/${total} shown` : "";
-  document.querySelectorAll("tr.probe").forEach((tr) =>
-    tr.addEventListener("click", () => openDrawer(tr.dataset.id)));
+  $$(".lane").forEach((l) => { if (!l.querySelector(".card")) l.remove(); });
+  $$(".card").forEach((el) => { el.addEventListener("click", () => openDrawer(el.dataset.id)); updateCard(el.dataset.id); });
+  buildFilters();
+  applyFilters();
 }
 
-function openDrawer(id) {
-  const p = probes.get(id); if (!p) return;
-  const d = $("#drawer");
-  d.innerHTML = `<h2>${esc(p.name)} <span class="badge ${p.status}">${p.status.toUpperCase()}</span></h2>
-    <dl>
-      <dt>ID</dt><dd>${esc(p.id)}</dd>
-      <dt>Category</dt><dd>${esc(p.category)}</dd>
-      ${p.expect ? `<dt>Expectation</dt><dd>${p.met === null || p.met === undefined ? "pending" : p.met ? "✓ met" : "✗ NOT met"} (expected ${p.expect.toUpperCase()})</dd>` : ""}
-      <dt>Exit code</dt><dd>${p.exit_code ?? "—"}</dd>
-      <dt>Latency</dt><dd>${p.latency_ms ? Math.round(p.latency_ms) + " ms" : "—"}</dd>
-      ${p.detail ? `<dt>Detail</dt><dd>${esc(p.detail)}</dd>` : ""}
-    </dl>
-    <h4>stdout</h4><pre>${esc(p.stdout || "(empty)")}</pre>
-    <h4>stderr</h4><pre>${esc(p.stderr || "(empty)")}</pre>
-    <button class="ghost" onclick="document.querySelector('#drawer').classList.remove('open')">Close</button>`;
-  d.classList.add("open");
+function histDots(id, n) {
+  return (store.hist[id] || []).slice(-n).map((s) => `<i class="${s}"></i>`).join("");
+}
+
+function updateCard(id) {
+  const el = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+  const p = probes.get(id);
+  if (!el || !p) return;
+  const v = verdictOf(id);
+  const isRunning = p.status === "running" && running;
+  const shown = v || "pending";
+  const d = deltaOf(id);
+  el.classList.remove("allowed", "denied", "error", "pending", "running", "has-delta");
+  el.classList.add(shown);
+  if (isRunning) el.classList.add("running");
+  if (d) el.classList.add("has-delta");
+  const ref = referenceOf(id);
+  const b = blockerOf(id);
+  let exp = "";
+  if (p.expect) {
+    const met = v ? granted(v) === (p.expect === "allowed") : null;
+    exp = met === null ? `<span>expect ${p.expect}</span>`
+        : met ? `<span class="exp-ok">✓ expected ${p.expect}</span>`
+              : `<span class="exp-bad">✗ expected ${p.expect.toUpperCase()}</span>`;
+  }
+  el.innerHTML = `
+    ${d ? `<span class="dbadge ${d}">${icon(d === "gained" ? "up" : "down")}${d === "gained" ? "GAINED" : "LOST"}</span>` : ""}
+    <div class="st">${icon(isRunning ? "spin" : STATUS_ICON[shown])}</div>
+    <div class="nm" title="${esc(p.name)}">${esc(p.name)}</div>
+    <div class="verdict">${v ? v.toUpperCase() : "—"}</div>
+    <div class="cmd${b ? "" : " wide"}" title="${esc(p.command)}">$ ${esc(p.command || "")}</div>
+    ${b ? `<div class="blkcell">${blkTag(b)}</div>` : ""}
+    <div class="meta">${exp}
+      ${p.exit_code !== null && p.exit_code !== undefined ? `<span>exit ${p.exit_code}</span>` : ""}
+      ${p.latency_ms ? `<span>${Math.round(p.latency_ms)} ms</span>` : ""}
+      ${d && ref ? `<span>was ${ref}</span>` : ""}
+      <span class="hist" title="recent runs (oldest → newest)">${histDots(id, 12)}</span></div>`;
+}
+
+function flash(id, kind) {
+  const el = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+  if (!el) return;
+  el.classList.remove("flip-lost", "flip-gained");
+  void el.offsetWidth;  // restart the animation
+  el.classList.add(`flip-${kind}`);
+  el.addEventListener("animationend", function done(e) {
+    if (e.target !== el || !e.animationName.startsWith("flash")) return;
+    el.classList.remove(`flip-${kind}`); el.removeEventListener("animationend", done);
+  });
+}
+
+// ---- scoreboard ----
+let lastScores = {};
+function setScore(sel, html) {
+  const el = $(sel), n = el.querySelector(".n");
+  if (n.innerHTML === html) return;
+  n.innerHTML = html;
+  if (lastScores[sel] !== undefined) { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
+  lastScores[sel] = html;
+}
+function renderStats() {
+  let a = 0, dn = 0, e = 0, drift = 0, gained = 0, lost = 0, total = 0, bySandbox = 0, byBaseline = 0;
+  const per = {};
+  for (const id of order) {
+    const p = probes.get(id); if (!p) continue;
+    const v = verdictOf(id);
+    const c = (per[p.category] ||= { a: 0, d: 0, e: 0, n: 0 });
+    c.n++; total++;
+    if (v === "allowed") { a++; c.a++; } else if (v === "denied") { dn++; c.d++; } else if (v === "error") { e++; c.e++; }
+    if (p.expect && v && granted(v) !== (p.expect === "allowed")) drift++;
+    const d = deltaOf(id); if (d === "gained") gained++; if (d === "lost") lost++;
+    const b = blockerOf(id); if (b?.kind === "sandbox") bySandbox++; else if (b) byBaseline++;
+  }
+  const any = a + dn + e > 0;
+  $("#denied-split").innerHTML = any ? `<b>${bySandbox}</b> by sandbox · ${byBaseline} baseline` : "";
+  setScore("#s-allowed", any ? String(a) : "–");
+  setScore("#s-denied", any ? String(dn + e) : "–");
+  setScore("#s-drift", any ? String(drift) : "–");
+  setScore("#s-delta", `<span class="up">+${gained}</span><span class="sep">/</span><span class="dn">−${lost}</span>`);
+  $("#delta-label").lastChild.textContent = store.baseline ? "Vs baseline" : "Since last run";
+  $("#posture").innerHTML = total ? `<span style="width:${a / total * 100}%;background:var(--green)"></span>` +
+    `<span style="width:${e / total * 100}%;background:var(--amber)"></span>` +
+    `<span style="width:${dn / total * 100}%;background:var(--red)"></span>` : "";
+  $$(".lane").forEach((l) => {
+    const c = per[l.dataset.cat] || { a: 0, d: 0, e: 0, n: 0 };
+    l.querySelector(".frac").innerHTML = `<b>${c.a}</b><span> / ${c.n} allowed</span>`;
+    const [ia, ie, id] = l.querySelectorAll(".meter i");
+    ia.style.width = `${c.n ? c.a / c.n * 100 : 0}%`;
+    ie.style.width = `${c.n ? c.e / c.n * 100 : 0}%`;
+    id.style.width = `${c.n ? c.d / c.n * 100 : 0}%`;
+  });
+}
+
+// ---- change feed ----
+function renderFeed(freshCount = 0) {
+  const list = $("#feed-list");
+  if (!store.feed.length) { list.innerHTML = `<li class="empty">No access changes yet — apply a policy and re-run.</li>`; return; }
+  list.innerHTML = store.feed.slice(0, 40).map((f, i) => {
+    const m = catMeta(f.cat);
+    return `<li class="${f.kind}${i < freshCount ? " fresh" : ""}">
+      <span class="t">${new Date(f.t).toLocaleTimeString()}</span>
+      <span class="tag">${icon(f.kind === "gained" ? "unlock" : "lock")} ${f.kind === "gained" ? "GAINED" : "LOST"}</span>
+      <span style="color:var(--c-${esc(f.cat)}, var(--muted))">${icon(m.icon)}</span>
+      <span class="nm">${esc(f.name)}</span>${f.blocker ? blkTag(f.blocker) : ""}</li>`;
+  }).join("");
+}
+
+// ---- toasts + sound ----
+function toast(kind, html, ms = 4500) {
+  const el = document.createElement("div");
+  el.className = `toast ${kind}`; el.innerHTML = html;
+  $("#toasts").appendChild(el);
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 300); }, ms);
+}
+let audio = null;
+function beep(kind) {
+  if (!store.sound) return;
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+    o.type = kind === "lost" ? "square" : "sine";
+    o.frequency.setValueAtTime(kind === "lost" ? 220 : 660, t);
+    o.frequency.exponentialRampToValueAtTime(kind === "lost" ? 110 : 990, t + 0.18);
+    g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.26);
+  } catch {}
+}
+
+// ---- ingesting results ----
+function ingest(p, live) {
+  const before = store.last[p.id];
+  probes.set(p.id, p);
+  if (!isFinal(p.status)) return;
+  if (live || before !== p.status) prev[p.id] = before;
+  if (before && granted(before) !== granted(p.status)) {
+    const kind = granted(p.status) ? "gained" : "lost";
+    store.feed.unshift({ t: Date.now(), id: p.id, name: p.name, cat: p.category, kind,
+                         blocker: kind === "lost" ? p.blocker : null });
+    store.feed.length = Math.min(store.feed.length, 100);
+    if (live) { runFlips.push({ kind, layer: p.blocker?.layer }); requestAnimationFrame(() => flash(p.id, kind)); beep(kind); }
+  }
+  if (live || before !== p.status) {
+    const h = (store.hist[p.id] ||= []);
+    h.push(p.status); if (h.length > 24) h.splice(0, h.length - 24);
+  }
+  store.last[p.id] = p.status;
 }
 
 function applySnapshot(s) {
   order = s.results.map((r) => r.id);
-  probes = new Map(s.results.map((r) => [r.id, r]));
+  probes = new Map();
+  const feedBefore = store.feed.length;
+  s.results.forEach((r) => ingest(r, false));
+  system = s.system; interval = s.interval_seconds || interval;
+  saveStore();
   renderRibbon(s.system);
-  renderTable();
+  laneKey = ""; buildLanes();
   setRunning(s.running);
+  renderFeed(store.feed.length - feedBefore);
 }
 
-function setRunning(running) {
-  $("#run").disabled = running;
-  $("#statusline").textContent = running ? "probes running…" : "";
-  if (running) {
-    for (const [id, p] of probes) { p.status = "running"; probes.set(id, p); }
-    renderTable();
+function setRunning(r) {
+  running = r;
+  const btn = $("#run");
+  btn.disabled = r; btn.classList.toggle("busy", r);
+  btn.querySelector("svg").outerHTML = icon(r ? "spin" : "play");
+  btn.querySelector(".lbl").textContent = r ? "Probing…" : "Run Probes";
+  if (r) {
+    runFlips = [];
+    for (const p of probes.values()) p.status = "running";
   }
+  order.forEach(updateCard);
+  renderStats();
+}
+
+function summarizeRun() {
+  const lostFlips = runFlips.filter((f) => f.kind === "lost");
+  const lost = lostFlips.length, gained = runFlips.length - lost;
+  const layers = [...new Set(lostFlips.map((f) => f.layer).filter(Boolean))].join(", ");
+  if (lost) toast("lost", `${icon("lock")} ${lost} capabilit${lost === 1 ? "y" : "ies"} LOCKED DOWN${layers ? ` <small style="font-weight:600">by ${esc(layers)}</small>` : ""}`);
+  if (gained) toast("gained", `${icon("unlock")} ${gained} capabilit${gained === 1 ? "y" : "ies"} OPENED UP`);
 }
 
 // ---- live events ----
@@ -245,40 +625,131 @@ function connect() {
   es.addEventListener("snapshot", (e) => applySnapshot(JSON.parse(e.data)));
   es.addEventListener("probe", (e) => {
     const p = JSON.parse(e.data);
-    if (!order.includes(p.id)) order.push(p.id);
-    probes.set(p.id, p);
-    renderTable();
+    if (!order.includes(p.id)) { order.push(p.id); probes.set(p.id, p); buildLanes(); }
+    const feedBefore = store.feed.length;
+    ingest(p, true);
+    saveStore();
+    updateCard(p.id);
+    renderStats();
+    if (store.feed.length !== feedBefore) renderFeed(store.feed.length - feedBefore);
   });
   es.addEventListener("run_start", () => setRunning(true));
-  es.addEventListener("run_complete", () => setRunning(false));
-  es.addEventListener("config", () => { loadConfigEditor(); refreshSnapshot(); });
+  es.addEventListener("run_complete", () => { setRunning(false); summarizeRun(); scheduleAuto(); });
+  es.addEventListener("config", () => { if ($("#main").classList.contains("editing")) loadConfigEditor(); refreshSnapshot(); });
   es.onopen = () => { const c = $("#conn"); c.textContent = "● live"; c.classList.add("live"); };
   es.onerror = () => { const c = $("#conn"); c.textContent = "○ reconnecting…"; c.classList.remove("live"); };
 }
 
 async function refreshSnapshot() {
-  const r = await fetch("/api/probes");
-  const body = await r.json();
+  const body = await (await fetch("/api/probes")).json();
   order = body.results.map((x) => x.id);
-  body.results.forEach((x) => probes.set(x.id, x));
-  renderTable();
+  probes = new Map();
+  body.results.forEach((x) => ingest(x, false));
+  buildLanes();
+  order.forEach(updateCard);
+  renderStats();
 }
 
-$("#run").addEventListener("click", async () => { await fetch("/api/run", { method: "POST" }); });
+async function runNow() { if (!running) await fetch("/api/run", { method: "POST" }); }
+$("#run").addEventListener("click", runNow);
+
+// ---- auto mode: re-run every interval_seconds from checks.yaml ----
+function scheduleAuto() {
+  clearTimeout(autoTimer);
+  if (auto) autoTimer = setTimeout(runNow, interval * 1000);
+}
+$("#auto").addEventListener("click", () => {
+  auto = !auto;
+  $("#auto").classList.toggle("on", auto);
+  $("#auto .lbl").textContent = auto ? `Auto · ${interval}s` : "Auto";
+  if (auto && !running) runNow(); else clearTimeout(autoTimer);
+});
+
+// ---- baseline ----
+function renderBaselineChip() {
+  const chip = $("#baseline-chip"), b = store.baseline;
+  chip.classList.toggle("show", !!b);
+  $("#pin").classList.toggle("on", !!b);
+  if (b) chip.innerHTML = `Baseline: <b>${esc(b.host || "?")}</b> @ ${new Date(b.t).toLocaleTimeString()} <a id="unpin" title="clear baseline">${icon("x")}</a>`;
+  const u = $("#unpin");
+  if (u) u.addEventListener("click", () => { store.baseline = null; saveStore(); renderBaselineChip(); order.forEach(updateCard); renderStats(); });
+}
+$("#pin").addEventListener("click", () => {
+  const status = {};
+  for (const id of order) { const v = verdictOf(id); if (v) status[id] = v; }
+  store.baseline = { t: Date.now(), host: system?.hostname, status };
+  saveStore(); renderBaselineChip(); order.forEach(updateCard); renderStats();
+  toast("info", `${icon("pin")} Baseline pinned — cards now show changes against this run`, 3000);
+});
+
+// ---- sound toggle ----
+function renderSound() {
+  const b = $("#sound");
+  b.innerHTML = icon(store.sound ? "sound" : "mute");
+  b.classList.toggle("on", store.sound);
+}
+$("#sound").addEventListener("click", () => { store.sound = !store.sound; saveStore(); renderSound(); beep("gained"); });
+
+$("#clear-feed").addEventListener("click", () => { store.feed = []; saveStore(); renderFeed(); });
 
 // ---- category view filters ----
-document.querySelectorAll(".flt").forEach((btn) =>
-  btn.addEventListener("click", () => {
+function buildFilters() {
+  const cats = [...$$(".lane")].map((l) => l.dataset.cat);
+  const f = $("#filters");
+  f.querySelectorAll(".flt").forEach((b) => b.remove());
+  cats.forEach((c) => {
+    const m = catMeta(c);
+    f.insertAdjacentHTML("beforeend",
+      `<button class="flt${hiddenCats.has(c) ? "" : " on"}" data-cat="${esc(c)}" style="--cc: var(--c-${esc(c)}, var(--muted))">${icon(m.icon)}${esc(m.label)}</button>`);
+  });
+  f.querySelectorAll(".flt").forEach((btn) => btn.addEventListener("click", () => {
     const cat = btn.dataset.cat;
-    if (hiddenCats.has(cat)) { hiddenCats.delete(cat); btn.classList.add("on"); }
-    else { hiddenCats.add(cat); btn.classList.remove("on"); }
-    renderTable();
+    if (hiddenCats.has(cat)) hiddenCats.delete(cat); else hiddenCats.add(cat);
+    btn.classList.toggle("on", !hiddenCats.has(cat));
+    applyFilters();
   }));
+}
+function applyFilters() {
+  $$(".lane").forEach((l) => l.classList.toggle("hidden", hiddenCats.has(l.dataset.cat)));
+}
+
+// ---- drawer ----
+function openDrawer(id) {
+  const p = probes.get(id); if (!p) return;
+  const v = verdictOf(id) || "pending", m = catMeta(p.category), d = deltaOf(id), ref = referenceOf(id);
+  const dr = $("#drawer");
+  dr.style.setProperty("--sc", `var(--${{ allowed: "green", denied: "red", error: "amber" }[v] || "dim"})`);
+  dr.innerHTML = `<h2>${esc(p.name)}</h2>
+    <div class="catline" style="color:var(--c-${esc(p.category)}, var(--muted))">${icon(m.icon)} ${esc(m.label)}</div>
+    <div class="bigstat">${icon(STATUS_ICON[v])} ${v.toUpperCase()}
+      ${d ? `<small>${d === "gained" ? "▲ gained" : "▼ lost"} — was ${esc(ref)}${store.baseline ? " at baseline" : " last run"}</small>` : ""}</div>
+    <dl>
+      <dt>ID</dt><dd>${esc(p.id)}</dd>
+      <dt>Command</dt><dd><code>${esc(p.command)}</code></dd>
+      ${p.expect ? `<dt>Expectation</dt><dd>${v === "pending" ? "pending" : granted(v) === (p.expect === "allowed") ? "✓ met" : "✗ NOT met"} (expected ${p.expect.toUpperCase()})</dd>` : ""}
+      <dt>Exit code</dt><dd>${p.exit_code ?? "—"}</dd>
+      <dt>Latency</dt><dd>${p.latency_ms ? Math.round(p.latency_ms) + " ms" : "—"}</dd>
+      ${p.detail ? `<dt>Detail</dt><dd>${esc(p.detail)}</dd>` : ""}
+      ${blockerOf(id) ? `<dt>Blocked by</dt><dd>${blkTag(blockerOf(id))} <span style="color:var(--muted)">${KIND_LABEL[blockerOf(id).kind] || ""}</span><br>${esc(blockerOf(id).reason)}</dd>` : ""}
+      <dt>History</dt><dd><div class="hist">${histDots(id, 24) || "—"}</div></dd>
+    </dl>
+    <h4>stdout</h4><pre>${esc(p.stdout || "(empty)")}</pre>
+    <h4>stderr</h4><pre>${esc(p.stderr || "(empty)")}</pre>
+    <button class="ghost" id="close-drawer">Close</button>`;
+  $("#close-drawer").addEventListener("click", () => dr.classList.remove("open"));
+  dr.classList.add("open");
+}
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("textarea, input")) return;
+  if (e.key === "Escape") $("#drawer").classList.remove("open");
+  if (e.key === "r" && !e.metaKey && !e.ctrlKey) runNow();
+});
 
 // ---- YAML editor ----
 $("#toggle-editor").addEventListener("click", () => {
   const m = $("#main");
   m.classList.toggle("editing");
+  $("#toggle-editor").classList.toggle("on", m.classList.contains("editing"));
   if (m.classList.contains("editing")) loadConfigEditor();
 });
 async function loadConfigEditor() {
@@ -293,8 +764,7 @@ $("#save-cfg").addEventListener("click", async () => {
     $("#cfgerr").textContent = body.detail || "invalid configuration";
   } else {
     $("#cfgerr").textContent = "";
-    $("#statusline").textContent = "configuration applied";
-    setTimeout(() => ($("#statusline").textContent = ""), 2500);
+    toast("info", "configuration applied", 2500);
   }
 });
 
@@ -322,6 +792,10 @@ $("#export-policy").addEventListener("click", async () => {
   URL.revokeObjectURL(a.href);
 });
 
+hydrateIcons();
+renderSound();
+renderBaselineChip();
+renderFeed();
 connect();
 </script>
 </body>

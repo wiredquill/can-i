@@ -12,6 +12,7 @@ import os
 import signal
 import time
 from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -27,6 +28,14 @@ class Status(str, enum.Enum):
     ERROR = "error"  # the probe itself failed to execute (spawn error)
 
 
+class Blocker(BaseModel):
+    """Which layer denied a probe (see attribution.py)."""
+
+    layer: str  # short tag for badges, e.g. "Landlock"
+    kind: Literal["sandbox", "baseline", "unknown"]  # policy enforcement vs. denied anyway
+    reason: str  # one sentence: what the evidence was
+
+
 class ProbeResult(BaseModel):
     id: str
     name: str
@@ -40,6 +49,7 @@ class ProbeResult(BaseModel):
     stdout: str = ""
     stderr: str = ""
     detail: str = ""
+    blocker: Blocker | None = None  # filled in by ProbeState for denied/error results
 
 
 def _truncate(text: str) -> str:

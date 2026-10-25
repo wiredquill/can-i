@@ -91,16 +91,21 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"landlock: {landlock}  seccomp: {sysinfo['seccomp']}"
     )
     table = Table(show_lines=False)
-    for col in ("Status", "Check", "Category", "Exit", "Latency", "Detail"):
+    for col in ("Status", "Check", "Category", "Blocked by", "Exit", "Latency", "Detail"):
         table.add_column(col)
     styles = {"allowed": "bold green", "denied": "bold red", "error": "bold yellow"}
+    blocker_styles = {"sandbox": "bold magenta", "baseline": "dim", "unknown": "yellow"}
     for r in results:
         label = r.status.value.upper()
         style = styles.get(r.status.value, "white")
+        blocked = (
+            f"[{blocker_styles[r.blocker.kind]}]{r.blocker.layer}[/]" if r.blocker else ""
+        )
         table.add_row(
             f"[{style}]{label}[/]",
             r.name,
             r.category,
+            blocked,
             str(r.exit_code) if r.exit_code is not None else "—",
             f"{r.latency_ms:.0f} ms",
             r.detail,

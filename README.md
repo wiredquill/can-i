@@ -30,6 +30,21 @@ Probes are defined in [`checks.yaml`](checks.yaml) — one benign shell command 
 | `filesystem` | read `/etc/shadow`, write `/etc` vs `/tmp`, exec from `noexec` mounts, `/proc/1/environ` |
 | `process` | spawn `sh`/`curl`/`nmap`, `unshare` user namespaces, `sudo -n` |
 
+### Who said no? (`blocked_by`)
+
+Every denied probe carries a best-guess **blocker** — which layer refused it — derived from
+stderr, the exit code and the sandbox context ([`attribution.py`](src/cani/attribution.py)):
+
+| Kind | Layers | Meaning |
+|---|---|---|
+| **sandbox** (pink ◆) | `Landlock`, `seccomp`, `OpenShell egress`, `CAP_NET_RAW`, `no_new_privs`, `dropped`, … | the sandbox policy enforced this denial |
+| **baseline** (grey ·) | `file perms`, `not installed`, `sudoers`, `missing`, … | would be denied without any sandbox |
+
+The kernel doesn't say which LSM produced an errno, so this is a heuristic — e.g. EACCES on a
+file whose unix mode bits *allow* access is attributed to Landlock inside OpenShell, while
+`/etc/shadow` (mode 0640) is attributed to file permissions. The reason text in the detail
+panel says what evidence each guess rests on.
+
 ## Quick start
 
 ### 1. Native / agent-local via mise (no container)
@@ -143,15 +158,18 @@ openshell forward service --target-port 8000 --local 0.0.0.0:8477 can-i
 ```
 
 Verified on OpenShell v0.1.5 (docker driver): `can-i run` in the sandbox reports
-**12/12 expectations met** — suse.com/DNS and /tmp allowed; metadata, /etc/shadow,
-/etc writes, /proc/1/environ denied (Landlock); unshare denied (seccomp: filter);
-ping/nmap/sudo denied.
+**12/12 expectations met** — suse.com/DNS and /tmp allowed; metadata denied (OpenShell egress);
+unshare denied (seccomp: filter). /etc/shadow, /etc writes and /proc/1/environ are denied too,
+but by unix file permissions (the workload runs as uid 10001) before Landlock is consulted, and
+ping/nmap/sudo are simply not installed in the image — the "Blocked by" column shows this.
+To see Landlock itself refuse, probe a path the mode bits allow but the policy omits
+(e.g. `ls /var/lib`, `touch $HOME/x`).
 
 ## Usage
 
 ```
 can-i run  [--config checks.yaml] [--json]   # one-shot probe report (exit 0)
-can-i tui  [--config checks.yaml]            # interactive terminal UI (r/space = run, q = quit)
+can-i tui  [--config checks.yaml]            # terminal UI (r/space run, a auto, b baseline, 1-3 filter, q quit)
 can-i web  [--config checks.yaml] [--host 0.0.0.0] [--port 8000]
 can-i from-policy POLICY.yaml [-o checks.yaml]  # OpenShell policy -> test plan
 can-i to-policy [--config checks.yaml]          # checks.yaml -> OpenShell policy
@@ -238,6 +256,7 @@ The suite covers probe-engine timeout/exit-code/output handling, YAML schema val
 │   ├── config.py          # checks.yaml load/validate/atomic save
 │   ├── policy.py          # OpenShell policy <-> checks.yaml interop
 │   ├── probes.py          # async probe engine (timeout, capture, truncation)
+│   ├── attribution.py     # which layer denied a probe (Landlock, seccomp, …)
 │   ├── state.py           # shared state + subscriber fan-out
 │   ├── system_info.py     # host/sandbox introspection (caps, apparmor, seccomp)
 │   ├── server.py          # FastAPI REST + SSE + dashboard

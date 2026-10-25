@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from .attribution import attribute
 from .config import Config, load_config, save_config
 from .probes import ProbeResult, Status, run_all
 from .system_info import gather
@@ -61,8 +62,10 @@ class ProbeState:
         async with self._run_lock:
             self.running = True
             await self._broadcast({"type": "run_start"})
+            system = gather()
 
             async def on_update(result: ProbeResult) -> None:
+                result.blocker = attribute(result, system)
                 self.results[result.id] = result
                 await self._broadcast(
                     {"type": "probe", "data": result.model_dump(mode="json")}
