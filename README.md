@@ -173,7 +173,7 @@ To see Landlock itself refuse, probe a path the mode bits allow but the policy o
 
 ```
 can-i run  [--config checks.yaml] [--json]   # one-shot probe report (exit 0)
-can-i tui  [--config checks.yaml]            # terminal UI (r/space run, a auto, b baseline, 1-3 filter, q quit)
+can-i tui  [--config checks.yaml]            # terminal UI (r/space run, a auto, b baseline, 1-3 show/hide category, 0 show all, tab next box, q quit)
 can-i web  [--config checks.yaml] [--host 0.0.0.0] [--port 8000]
 can-i from-policy POLICY.yaml [-o checks.yaml]  # OpenShell policy -> test plan
 can-i to-policy [--config checks.yaml]          # checks.yaml -> OpenShell policy
