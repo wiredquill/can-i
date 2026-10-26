@@ -13,6 +13,37 @@ questions:
   group: Access
   type: boolean
   default: false
+- variable: openshell.service.type
+  label: Gateway Service type
+  group: External access
+  type: enum
+  default: ClusterIP
+  options: [ClusterIP, NodePort, LoadBalancer]
+  description: >-
+    How the openshell CLI outside the cluster reaches the gateway (gRPC over mTLS on 8080).
+    <b>ClusterIP</b>: through <code>kubectl port-forward svc/openshell 17680:8080</code>, as the lab's setup.sh does.
+    <b>NodePort</b> / <b>LoadBalancer</b>: directly; also put that address in the certificate names below.
+    Sandboxes themselves are never exposed: you reach them through the gateway
+    (<code>openshell sandbox connect</code> / <code>forward</code>).
+- variable: openshell.service.nodePort
+  label: Gateway NodePort
+  group: External access
+  type: int
+  default: ""
+  min: 30000
+  max: 32767
+  show_if: "openshell.service.type=NodePort"
+  description: Blank = assigned by Kubernetes.
+- variable: openshell.pkiInitJob.extraServerSans
+  label: Extra certificate names
+  group: External access
+  type: string
+  default: ""
+  description: >-
+    Comma-separated IPs and hostnames the CLI will dial, e.g. <code>10.0.9.50,openshell.lab.example.com</code>
+    (a node IP for NodePort, the load balancer address for LoadBalancer). Not needed for port-forward.
+    Applied when the certificate is first created; to change it later, delete the
+    <code>openshell-server-tls</code> Secret and upgrade.
 - variable: openshell.sandbox.image.repository
   label: Default sandbox image
   group: Sandboxes

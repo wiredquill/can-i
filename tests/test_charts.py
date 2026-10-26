@@ -74,3 +74,24 @@ def test_policy_or_image_change_restarts_the_client(tmp_path):
     base = annotations()
     assert annotations(sandbox={"image": "nvidia"})["checksum/image"] != base["checksum/image"]
     assert annotations(policy={"egress": "opensuse.org:443"})["checksum/policy"] != base["checksum/policy"]
+
+
+def test_gateway_installs_from_git_without_dependency_build(tmp_path):
+    """Rancher's git ClusterRepo packages the chart directory as committed:
+    the vendored NVIDIA chart must be there, with the form-friendly SAN patch."""
+    gateway = CHART.parent / "openshell-gateway"
+    subprocess.run(["helm", "package", str(gateway), "-d", str(tmp_path)],
+                   check=True, capture_output=True)
+    (tgz,) = tmp_path.glob("openshell-gateway-*.tgz")
+    vals = tmp_path / "values.yaml"
+    vals.write_text(json.dumps({"openshell": {
+        "agentSandbox": {"preflight": {"enabled": False}},
+        "service": {"type": "NodePort"},
+        "pkiInitJob": {"extraServerSans": "10.0.9.50, openshell.lab.example.com"},
+    }}))
+    out = subprocess.run(["helm", "template", "openshell", str(tgz), "-f", str(vals)],
+                         check=True, capture_output=True, text=True).stdout
+    assert "--server-san=10.0.9.50" in out
+    assert "--server-san=openshell.lab.example.com" in out
+    services = [d for d in yaml.safe_load_all(out) if d and d["kind"] == "Service"]
+    assert any(s["metadata"]["name"] == "openshell" and s["spec"]["type"] == "NodePort" for s in services)

@@ -19,7 +19,7 @@ WORK=$(mktemp -d)
 trap 'git -C "$ROOT" worktree remove --force "$WORK/branch" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
 for c in "$ROOT"/charts/*/; do
-  helm package "$c" --dependency-update -d "$WORK/pkg" >/dev/null
+  helm package "$c" -d "$WORK/pkg" >/dev/null
 done
 ls "$WORK/pkg"
 

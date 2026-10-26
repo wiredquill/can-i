@@ -45,8 +45,9 @@ client:
     limits: {memory: 128Mi}
 
 service:
-  # ClusterIP, NodePort or LoadBalancer
-  type: ClusterIP
+  # NodePort: the dashboard is on every node's IP without a port-forward.
+  # ClusterIP (with the Ingress below) or LoadBalancer also work.
+  type: NodePort
   port: 80
   # Only for NodePort; blank = assigned by Kubernetes.
   nodePort: ""

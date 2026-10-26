@@ -35,7 +35,7 @@ spec:
       releaseName: agent-sandbox
     - chartName: openshell-gateway
       chartRepo: wiredquill-can-i
-      chartVersion: "0.1.5"
+      chartVersion: "0.1.6"
       releaseName: openshell
       values:
         openshell:
@@ -47,7 +47,7 @@ spec:
               enabled: false
     - chartName: can-i
       chartRepo: wiredquill-can-i
-      chartVersion: "0.1.0"
+      chartVersion: "0.1.1"
       releaseName: can-i
       values:
         sandbox:

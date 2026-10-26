@@ -29,6 +29,20 @@ openshell:
       repository: ghcr.io/wiredquill/openshell-lab/leap
       tag: "16.0"
 
+  # How the CLI on your workstation reaches the gateway. ClusterIP = through
+  # `kubectl port-forward` (the lab's setup.sh). NodePort/LoadBalancer = directly,
+  # which also needs the address in pkiInitJob.extraServerSans below.
+  service:
+    type: ClusterIP
+    nodePort: ""
+
+  pkiInitJob:
+    # Extra names on the gateway's TLS certificate, comma-separated, e.g.
+    # "10.0.9.50,openshell.lab.example.com". The CLI checks the certificate
+    # against the address it dials. Only applied when the certificate is
+    # first generated (see app-readme.md to regenerate).
+    extraServerSans: ""
+
   agentSandbox:
     preflight:
       # Fails the install when the Agent Sandbox CRDs are missing. The
