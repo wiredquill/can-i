@@ -32,7 +32,6 @@ jobs:
       - name: Lint and render every chart
         run: |
           for c in charts/*/; do
-            helm dependency build "$c"
             # offline render: the gateway's Agent Sandbox preflight needs a live cluster
             helm lint "$c" --set openshell.agentSandbox.preflight.enabled=false
             helm template ci "$c" --set openshell.agentSandbox.preflight.enabled=false > /dev/null

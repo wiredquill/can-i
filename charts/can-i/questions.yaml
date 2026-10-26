@@ -84,8 +84,12 @@ questions:
   label: Dashboard Service type
   group: Dashboard
   type: enum
-  default: ClusterIP
+  default: NodePort
   options: [ClusterIP, NodePort, LoadBalancer]
+  description: >-
+    How browsers outside the cluster reach the dashboard. The sandbox itself has no inbound network:
+    this app's client pod forwards the dashboard out of it through the gateway.
+    For ClusterIP use the Ingress below or <code>kubectl port-forward</code>.
 - variable: service.nodePort
   label: NodePort
   group: Dashboard
