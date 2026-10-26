@@ -7,9 +7,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  IMAGE: ghcr.io/${{ github.repository }}
-
 jobs:
   test:
     name: test suite
@@ -26,13 +23,49 @@ jobs:
       - name: Run tests
         run: .venv/bin/python -m pytest tests/ -q
 
+  charts:
+    name: helm charts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Lint and render every chart
+        run: |
+          for c in charts/*/; do
+            helm dependency build "$c"
+            # offline render: the gateway's Agent Sandbox preflight needs a live cluster
+            helm lint "$c" --set openshell.agentSandbox.preflight.enabled=false
+            helm template ci "$c" --set openshell.agentSandbox.preflight.enabled=false > /dev/null
+          done
+          for img in suse opensuse nvidia; do
+            helm template ci charts/can-i --set sandbox.image=$img | grep -q "can-i.*:latest"
+          done
+
   image:
-    name: official image -> ghcr.io
-    needs: test
+    name: ${{ matrix.image }} -> ghcr.io
+    needs: [test, charts]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # the can-i workload on three bases: the sandbox image dropdown in charts/can-i
+          - image: can-i
+            context: .
+            file: Dockerfile
+          - image: can-i-opensuse
+            context: .
+            file: images/opensuse/Dockerfile
+          - image: can-i-nvidia
+            context: .
+            file: images/nvidia/Dockerfile
+          # openshell CLI pod that launches the sandbox (charts/can-i)
+          - image: can-i-client
+            context: images/client
+            file: images/client/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +74,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ${{ env.IMAGE }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
@@ -59,10 +92,11 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

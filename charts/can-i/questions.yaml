@@ -1,0 +1,129 @@
+questions:
+- variable: sandbox.image
+  label: Sandbox image
+  group: Sandbox
+  type: enum
+  default: suse
+  required: true
+  options:
+    - suse
+    - opensuse
+    - nvidia
+    - custom
+  description: >-
+    The OpenShell child container can-i runs in.
+    <b>suse</b> = SUSE BCI (ghcr.io/wiredquill/can-i),
+    <b>opensuse</b> = openSUSE Leap 16.0 (ghcr.io/wiredquill/can-i-opensuse),
+    <b>nvidia</b> = NVIDIA base Ubuntu 24.04, the OpenShell chart's default sandbox base (ghcr.io/wiredquill/can-i-nvidia),
+    <b>custom</b> = your own image below.
+    Changing it recreates the sandbox.
+- variable: sandbox.customImage
+  label: Custom sandbox image
+  group: Sandbox
+  type: string
+  default: ""
+  show_if: "sandbox.image=custom"
+  required: true
+  description: Full image reference. It must contain can-i and a user with uid 10001.
+- variable: sandbox.name
+  label: Sandbox name
+  group: Sandbox
+  type: string
+  default: can-i
+  required: true
+  description: Name in OpenShell, used by <code>openshell sandbox connect</code> and <code>openshell policy update</code>.
+- variable: sandbox.gpu
+  label: Request a GPU
+  group: Sandbox
+  type: boolean
+  default: false
+  description: Ask OpenShell for a GPU for the sandbox. Needs a GPU node and a matching RuntimeClass on the gateway.
+- variable: sandbox.recreate
+  label: Recreate the sandbox when the app restarts
+  group: Sandbox
+  type: boolean
+  default: true
+  description: On, changes to the image or policy here take effect on upgrade. Off, a running sandbox is reused and keeps policy changes made with the CLI.
+
+- variable: policy.egress
+  label: Allowed egress (curl)
+  group: Starting policy
+  type: string
+  default: "suse.com:443"
+  description: >-
+    Comma-separated host:port that /usr/bin/curl may reach, e.g. <code>suse.com:443,opensuse.org:443</code>.
+    Leave blank to start with all network access denied. Network rules can also be changed live with
+    <code>openshell policy update</code>.
+- variable: policy.extraReadOnly
+  label: Extra read-only paths
+  group: Starting policy
+  type: string
+  default: ""
+  description: Comma-separated paths added to filesystem_policy.read_only.
+- variable: policy.extraReadWrite
+  label: Extra read-write paths
+  group: Starting policy
+  type: string
+  default: ""
+  description: Comma-separated paths added to filesystem_policy.read_write.
+
+- variable: gateway.endpoint
+  label: OpenShell gateway endpoint
+  group: OpenShell gateway
+  type: string
+  default: https://openshell:8080
+  description: The openshell-gateway app's Service. Install can-i in the same namespace.
+- variable: gateway.tlsSecret
+  label: Gateway client certificate Secret
+  group: OpenShell gateway
+  type: string
+  default: openshell-client-tls
+  description: Created by the openshell-gateway app in its namespace.
+
+- variable: service.type
+  label: Dashboard Service type
+  group: Dashboard
+  type: enum
+  default: ClusterIP
+  options: [ClusterIP, NodePort, LoadBalancer]
+- variable: service.nodePort
+  label: NodePort
+  group: Dashboard
+  type: int
+  default: ""
+  min: 30000
+  max: 32767
+  show_if: "service.type=NodePort"
+  description: Blank = assigned by Kubernetes.
+- variable: ingress.enabled
+  label: Expose the dashboard with an Ingress
+  group: Dashboard
+  type: boolean
+  default: false
+  show_subquestion_if: true
+  subquestions:
+  - variable: ingress.host
+    label: Hostname
+    type: hostname
+    default: can-i.example.com
+  - variable: ingress.className
+    label: Ingress class
+    type: string
+    default: ""
+    description: Blank = the cluster's default IngressClass.
+  - variable: ingress.tls
+    label: TLS
+    type: boolean
+    default: false
+    description: Serve HTTPS with the Secret <release>-tls (create it, or let cert-manager do it).
+
+- variable: client.image.repository
+  label: Client image
+  group: Advanced
+  type: string
+  default: ghcr.io/wiredquill/can-i-client
+- variable: client.image.tag
+  label: Client image tag
+  group: Advanced
+  type: string
+  default: latest

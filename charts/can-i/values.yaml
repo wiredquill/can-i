@@ -1,0 +1,60 @@
+# can-i as an OpenShell sandbox. A small client pod (the openshell CLI) creates
+# the sandbox through the gateway, then forwards the dashboard to a Service.
+# Install into the same namespace as the openshell-gateway chart.
+
+sandbox:
+  # Sandbox name in OpenShell (`openshell sandbox get <name>`).
+  name: can-i
+  # Which can-i image the sandbox runs: suse | opensuse | nvidia | custom
+  image: suse
+  images:
+    suse: ghcr.io/wiredquill/can-i:latest              # SUSE BCI Python 3.13
+    opensuse: ghcr.io/wiredquill/can-i-opensuse:latest # openSUSE Leap 16.0
+    nvidia: ghcr.io/wiredquill/can-i-nvidia:latest     # NVIDIA base Ubuntu 24.04
+  # Used when image is "custom". Must contain can-i and a uid-10001 user.
+  customImage: ""
+  # Request a GPU for the sandbox (needs a GPU node and RuntimeClass).
+  gpu: false
+  # Delete and recreate the sandbox when the client pod restarts, so image and
+  # policy changes in this form take effect. Off = reuse a running sandbox.
+  recreate: true
+
+# OpenShell policy for the sandbox: the grants can-i's probes need, nothing
+# more. Everything the dashboard shows as DENIED is denied by omission.
+policy:
+  # Comma-separated host:port that /usr/bin/curl may reach (L4 + TLS).
+  egress: "suse.com:443"
+  # Extra comma-separated paths, e.g. "/data" (applied when the sandbox starts).
+  extraReadOnly: ""
+  extraReadWrite: ""
+  # Must exist in the image; all can-i images ship user cani (10001).
+  runAsUser: "10001"
+
+gateway:
+  # The openshell-gateway chart's Service and client certificate Secret.
+  endpoint: https://openshell:8080
+  tlsSecret: openshell-client-tls
+
+client:
+  image:
+    repository: ghcr.io/wiredquill/can-i-client
+    tag: latest
+    pullPolicy: Always
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+service:
+  # ClusterIP, NodePort or LoadBalancer
+  type: ClusterIP
+  port: 80
+  # Only for NodePort; blank = assigned by Kubernetes.
+  nodePort: ""
+
+ingress:
+  enabled: false
+  className: ""
+  host: can-i.example.com
+  tls: false
+
+imagePullSecrets: []

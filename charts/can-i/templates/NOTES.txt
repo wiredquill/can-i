@@ -1,0 +1,24 @@
+can-i is starting as OpenShell sandbox "{{ .Values.sandbox.name }}" from
+  {{ include "can-i.sandboxImage" . }}
+
+Watch the client create it:
+  kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "can-i.fullname" . }}
+
+Web dashboard:
+{{- if .Values.ingress.enabled }}
+  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}
+{{- else if eq .Values.service.type "NodePort" }}
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "can-i.fullname" . }}   # http://<node>:<nodePort>
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "can-i.fullname" . }} 8477:{{ .Values.service.port }}
+  # then http://localhost:8477
+{{- end }}
+
+Stage mode in your terminal (a shell inside the sandbox, then the TUI):
+  kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "can-i.fullname" . }} -- openshell sandbox connect {{ .Values.sandbox.name }}
+  can-i tui --stage
+
+Grant access live and watch the dashboard flip:
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "can-i.fullname" . }} -- \
+    openshell policy update {{ .Values.sandbox.name }} --rule-name can-i-egress --binary /usr/bin/curl \
+    --add-endpoint opensuse.org:443:read-only:rest:enforce --wait

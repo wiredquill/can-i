@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "can-i.fullname" . }}-policy
+  labels:
+    {{- include "can-i.labels" . | nindent 4 }}
+data:
+  policy.yaml: |
+    # OpenShell v0.1.5 policy for the can-i sandbox, rendered by the can-i chart.
+    version: 1
+    filesystem_policy:
+      # /opt holds can-i's virtualenv in the openSUSE and NVIDIA images; the
+      # SUSE image installs under /usr/local. Paths missing from an image are skipped.
+      read_only:
+        - /usr
+        - /usr/local
+        - /opt
+        - /lib
+        - /lib64
+        - /etc
+        {{- range include "can-i.csv" .Values.policy.extraReadOnly | fromJsonArray }}
+        - {{ . }}
+        {{- end }}
+      read_write:
+        - /tmp
+        - /home/cani
+        {{- range include "can-i.csv" .Values.policy.extraReadWrite | fromJsonArray }}
+        - {{ . }}
+        {{- end }}
+    process:
+      run_as_user: {{ .Values.policy.runAsUser | quote }}
+    {{- $egress := include "can-i.csv" .Values.policy.egress | fromJsonArray }}
+    {{- if $egress }}
+    network_policies:
+      can-i-egress:
+        name: can-i-egress
+        endpoints:
+          {{- range $egress }}
+          {{- $hp := splitList ":" . }}
+          - host: {{ index $hp 0 }}
+            port: {{ if gt (len $hp) 1 }}{{ index $hp 1 }}{{ else }}443{{ end }}
+          {{- end }}
+        binaries:
+          - path: /usr/bin/curl
+    {{- end }}

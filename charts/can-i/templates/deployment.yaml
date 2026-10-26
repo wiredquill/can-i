@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "can-i.fullname" . }}
+  labels:
+    {{- include "can-i.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # One sandbox per release: the old pod must delete its sandbox before the new
+  # one creates it again, so never run two at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "can-i.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "can-i.selector" . | nindent 8 }}
+      annotations:
+        # restart (and so recreate the sandbox) when the policy or image changes
+        checksum/policy: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/image: {{ include "can-i.sandboxImage" . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # leave time to delete the sandbox on shutdown
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: client
+          image: "{{ .Values.client.image.repository }}:{{ .Values.client.image.tag }}"
+          imagePullPolicy: {{ .Values.client.image.pullPolicy }}
+          env:
+            - name: HOME
+              value: /home/client
+            - name: GATEWAY_ENDPOINT
+              value: {{ .Values.gateway.endpoint | quote }}
+            - name: SANDBOX_NAME
+              value: {{ .Values.sandbox.name | quote }}
+            - name: SANDBOX_IMAGE
+              value: {{ include "can-i.sandboxImage" . | quote }}
+            - name: SANDBOX_GPU
+              value: {{ .Values.sandbox.gpu | quote }}
+            - name: RECREATE
+              value: {{ .Values.sandbox.recreate | quote }}
+            - name: FORWARD_PORT
+              value: "8477"
+            # `kubectl exec ... -- openshell ...` uses the registered gateway
+            - name: OPENSHELL_GATEWAY
+              value: k8s
+          ports:
+            - name: http
+              containerPort: 8477
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            {{- toYaml .Values.client.resources | nindent 12 }}
+          volumeMounts:
+            - name: home
+              mountPath: /home/client
+            - name: tmp
+              mountPath: /tmp
+            - name: policy
+              mountPath: /etc/can-i
+              readOnly: true
+            - name: gateway-tls
+              mountPath: /etc/openshell/tls
+              readOnly: true
+      volumes:
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: policy
+          configMap:
+            name: {{ include "can-i.fullname" . }}-policy
+        - name: gateway-tls
+          secret:
+            secretName: {{ .Values.gateway.tlsSecret }}
