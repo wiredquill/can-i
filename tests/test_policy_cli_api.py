@@ -107,3 +107,20 @@ async def test_api_export_policy(client):
     assert resp.status_code == 200
     assert "suse.com" in resp.text
     assert resp.text.startswith("version: 1")
+
+
+async def test_api_fix_for_network_check(client, monkeypatch):
+    monkeypatch.setenv("CANI_SANDBOX_NAME", "demo")
+    resp = await client.get("/api/fix/net-https-external")
+    assert resp.status_code == 200
+    fix = resp.json()
+    assert fix["sandbox"] == "demo"
+    assert fix["command"].startswith("openshell policy update demo")
+    assert "--add-endpoint suse.com:443:read-only:rest:enforce" in fix["command"]
+    assert "host: suse.com" in fix["yaml"]
+    assert fix["live"] is True
+
+
+async def test_api_fix_unknown_check(client):
+    resp = await client.get("/api/fix/nope")
+    assert resp.status_code == 404

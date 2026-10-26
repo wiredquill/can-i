@@ -302,6 +302,15 @@
   #drawer .hist i.allowed { background: var(--green); } #drawer .hist i.denied { background: var(--red); }
   #drawer .hist i.error { background: var(--amber); }
 
+  #drawer .fix { margin: 16px 0; border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+                 border-radius: 8px; padding: 12px; background: color-mix(in srgb, var(--green) 6%, transparent); }
+  #drawer .fix h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; color: var(--green); }
+  #drawer .fix .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  #drawer .fix .tabs button { padding: 4px 12px; font-size: 12px; }
+  #drawer .fix .tabs .copy { margin-left: auto; }
+  #drawer .fix pre { max-height: 320px; margin: 0; }
+  #drawer .fix .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
   /* ---- editor ---- */
   #editor { display: none; flex-direction: column; background: var(--panel);
             border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
@@ -884,11 +893,42 @@ function openDrawer(id) {
       ${blockerOf(id) ? `<dt>Blocked by</dt><dd>${blkTag(blockerOf(id))} <span style="color:var(--muted)">${KIND_LABEL[blockerOf(id).kind] || ""}</span><br>${esc(blockerOf(id).reason)}</dd>` : ""}
       <dt>History</dt><dd><div class="hist">${histDots(id, 24) || "—"}</div></dd>
     </dl>
+    ${v === "denied" ? `<div class="fix" id="fix"><h4>${icon("unlock")} How to allow this</h4><div class="note">loading…</div></div>` : ""}
     <h4>stdout</h4><pre>${esc(p.stdout || "(empty)")}</pre>
     <h4>stderr</h4><pre>${esc(p.stderr || "(empty)")}</pre>
     <button class="ghost" id="close-drawer">Close</button>`;
   $("#close-drawer").addEventListener("click", () => dr.classList.remove("open"));
   dr.classList.add("open");
+  if (v === "denied") loadFix(id);
+}
+// The policy change that flips a denied check to ALLOWED: CLI command by default, YAML on request.
+async function loadFix(id) {
+  const resp = await fetch(`/api/fix/${encodeURIComponent(id)}`);
+  const box = $("#fix");
+  if (!box || !resp.ok) { if (box) box.querySelector(".note").textContent = "could not build a fix"; return; }
+  const f = await resp.json();
+  const head = box.querySelector("h4").outerHTML;
+  if (!f.command) { box.innerHTML = `${head}<div class="note">${esc(f.note)}</div>`; return; }
+  box.innerHTML = `${head}
+    <div class="tabs">
+      <button class="ghost on" data-view="command">Command</button>
+      <button class="ghost" data-view="yaml">YAML</button>
+      <button class="ghost copy" title="Copy to clipboard">Copy</button>
+    </div>
+    <pre></pre>
+    <div class="note">${esc(f.note)}</div>`;
+  let view = "command";
+  const show = () => {
+    box.querySelector("pre").textContent = f[view];
+    box.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
+  };
+  box.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => { view = b.dataset.view; show(); }));
+  box.querySelector(".copy").addEventListener("click", async (e) => {
+    try { await navigator.clipboard.writeText(f[view]); e.target.textContent = "Copied"; }
+    catch { e.target.textContent = "Copy failed"; }
+    setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
+  });
+  show();
 }
 document.addEventListener("keydown", (e) => {
   if (e.target.matches("textarea, input")) return;

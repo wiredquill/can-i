@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -66,6 +67,19 @@ def create_app(config_path: str | Path) -> FastAPI:
         from .policy import checks_to_policy
 
         return checks_to_policy(state.config)
+
+    @app.get("/api/fix/{check_id}")
+    async def get_fix(check_id: str) -> dict:
+        """How to change the policy so this check becomes ALLOWED."""
+        from .policy import fix_for_check
+
+        check = next((c for c in state.config.checks if c.id == check_id), None)
+        if check is None:
+            raise HTTPException(status_code=404, detail=f"no check {check_id!r}")
+        result = state.results.get(check_id)
+        kind = result.blocker.kind if result and result.blocker else None
+        sandbox = os.environ.get("CANI_SANDBOX_NAME", "can-i")
+        return {"sandbox": sandbox, **fix_for_check(check, sandbox, kind)}
 
     @app.get("/api/events")
     async def events(request: Request) -> StreamingResponse:
