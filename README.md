@@ -167,7 +167,57 @@ unshare denied (seccomp: filter). /etc/shadow, /etc writes and /proc/1/environ a
 but by unix file permissions (the workload runs as uid 10001) before Landlock is consulted, and
 ping/nmap/sudo are simply not installed in the image — the "Blocked by" column shows this.
 To see Landlock itself refuse, probe a path the mode bits allow but the policy omits
-(e.g. `ls /var/lib`, `touch $HOME/x`).
+(e.g. `ls /var/lib`, `touch /var/tmp/x`).
+
+### 4. Kubernetes with Rancher or SUSE AI Factory
+
+The same demo on a cluster: the OpenShell gateway runs in Kubernetes, and can-i runs as one
+of its sandboxes. Three Helm charts, each with a Rancher install form (`questions.yaml`):
+
+| Chart | What it installs |
+|---|---|
+| [`charts/agent-sandbox`](charts/agent-sandbox) 1.0.8 | the `Sandbox` CRD + controller OpenShell's Kubernetes driver needs (cluster-scoped, once per cluster) |
+| [`charts/openshell-gateway`](charts/openshell-gateway) 0.1.5 | NVIDIA's OpenShell chart with the [openshell-lab](https://github.com/wiredquill/openshell-lab) defaults |
+| [`charts/can-i`](charts/can-i) 0.1.0 | a client pod (the `openshell` CLI) that creates the can-i sandbox and serves its dashboard |
+
+The can-i form's **Sandbox image** dropdown picks the OpenShell child container:
+
+| Choice | Image | Base |
+|---|---|---|
+| `suse` | `ghcr.io/wiredquill/can-i` | SUSE BCI Python 3.13 ([Dockerfile](Dockerfile)) |
+| `opensuse` | `ghcr.io/wiredquill/can-i-opensuse` | openSUSE Leap 16.0 ([images/opensuse](images/opensuse/Dockerfile)) |
+| `nvidia` | `ghcr.io/wiredquill/can-i-nvidia` | `nvcr.io/nvidia/base/ubuntu:24.04`, NVIDIA's default sandbox base ([images/nvidia](images/nvidia/Dockerfile)) |
+| `custom` | any image with can-i and a uid-10001 user | |
+
+**Publish the charts** to the `aif/charts` branch, which Rancher reads as a git ClusterRepo,
+then register it once per Rancher management cluster:
+```bash
+scripts/publish-charts.sh --push
+kubectl apply -f catalog/clusterrepo.yaml      # ClusterRepo wiredquill-can-i
+```
+
+**Install with Rancher Apps:** install *Agent Sandbox controller*, then *OpenShell gateway*,
+then *can-i* in the **same namespace** as the gateway (can-i reads its
+`openshell-client-tls` Secret).
+
+**Or deploy the AI Factory blueprint**, which installs all three into one namespace:
+```bash
+kubectl apply -f catalog/blueprints/can-i-openshell-1-0-0.yaml
+```
+Then go to **AI Factory → Blueprints → can-i in an OpenShell sandbox → Deploy**.
+[`catalog/blueprints/blueprint-catalog.yaml`](catalog/blueprints/blueprint-catalog.yaml)
+lists it for the operator's catalog sync.
+
+**Drive the demo** through the client pod, which also works as your `openshell` CLI:
+```bash
+kubectl -n <ns> exec -it deploy/can-i -- openshell sandbox connect can-i   # then: can-i tui --stage
+kubectl -n <ns> exec deploy/can-i -- openshell policy update can-i \
+  --rule-name can-i-egress --binary /usr/bin/curl \
+  --add-endpoint opensuse.org:443:read-only:rest:enforce --wait
+```
+Changing the image or starting policy in the form recreates the sandbox. The cluster needs
+a CNI that enforces `NetworkPolicy`. If Agent Sandbox was already installed with
+`kubectl apply`, skip its chart: Helm can't adopt those resources.
 
 ## Usage
 
@@ -261,7 +311,11 @@ The suite covers probe-engine timeout/exit-code/output handling, YAML schema val
 ├── checks.yaml            # default probe definitions
 ├── .mise.toml             # runtimes + tasks (install/test/dev/start:tui/start:web)
 ├── install.sh             # one-line bootstrap (mise-based)
-├── Dockerfile             # multi-stage, SUSE BCI only
+├── Dockerfile             # multi-stage, SUSE BCI (the default image)
+├── images/                # opensuse/ and nvidia/ variants, client/ (openshell CLI pod)
+├── charts/                # agent-sandbox, openshell-gateway, can-i (Rancher forms)
+├── catalog/               # SUSE AI Factory blueprint + Rancher ClusterRepo
+├── scripts/publish-charts.sh  # package charts onto the aif/charts branch
 ├── pyproject.toml
 ├── examples/openshell-policy.yaml   # sample policy for from-policy
 ├── src/cani/

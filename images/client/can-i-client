@@ -1,0 +1,79 @@
+#!/bin/bash
+# Run can-i as an OpenShell sandbox and forward its web dashboard out of it.
+#
+#   1. register the in-cluster gateway with the CLI (mTLS bundle from a Secret)
+#   2. (re)create the sandbox from $SANDBOX_IMAGE under the policy in $POLICY_FILE
+#   3. forward 0.0.0.0:$FORWARD_PORT -> the dashboard on 127.0.0.1:$TARGET_PORT
+#      inside the sandbox, until the pod stops; then delete the sandbox.
+#
+# The pod is also the lab's CLI: `kubectl exec -it deploy/<release> -- openshell ...`
+set -euo pipefail
+
+: "${GATEWAY_ENDPOINT:=https://openshell:8080}"
+: "${GATEWAY_NAME:=k8s}"
+: "${TLS_DIR:=/etc/openshell/tls}"
+: "${SANDBOX_NAME:=can-i}"
+: "${SANDBOX_IMAGE:?SANDBOX_IMAGE is required}"
+: "${POLICY_FILE:=/etc/can-i/policy.yaml}"
+: "${SANDBOX_GPU:=false}"
+: "${RECREATE:=true}"
+: "${DELETE_ON_EXIT:=true}"
+: "${TARGET_PORT:=8000}"
+: "${FORWARD_PORT:=8477}"
+
+log() { printf '%s can-i-client: %s\n' "$(date -u +%FT%TZ)" "$*"; }
+
+# -- 1. gateway registration ------------------------------------------------------
+# `gateway add --local` expects the client bundle to be in place already.
+mtls="$HOME/.config/openshell/gateways/$GATEWAY_NAME/mtls"
+mkdir -p "$mtls"
+for f in ca.crt tls.crt tls.key; do cp "$TLS_DIR/$f" "$mtls/$f"; done
+chmod 600 "$mtls/tls.key"
+openshell gateway add "$GATEWAY_ENDPOINT" --local --name "$GATEWAY_NAME" >/dev/null 2>&1 || true
+export OPENSHELL_GATEWAY=$GATEWAY_NAME
+
+log "waiting for gateway $GATEWAY_ENDPOINT"
+until openshell status >/dev/null 2>&1; do sleep 5; done
+log "gateway connected"
+
+# -- 2. sandbox -------------------------------------------------------------------
+exists() { openshell sandbox get "$SANDBOX_NAME" >/dev/null 2>&1; }
+
+if exists && [ "$RECREATE" = true ]; then
+  log "deleting existing sandbox $SANDBOX_NAME (image or policy may have changed)"
+  openshell sandbox delete "$SANDBOX_NAME" >/dev/null || true
+  for _ in $(seq 60); do exists || break; sleep 2; done
+fi
+
+if exists; then
+  log "reusing sandbox $SANDBOX_NAME"
+else
+  args=(--name "$SANDBOX_NAME" --from "$SANDBOX_IMAGE" --policy "$POLICY_FILE"
+        --no-auto-providers --no-tty --detach)
+  [ "$SANDBOX_GPU" = true ] && args+=(--gpu)
+  log "creating sandbox $SANDBOX_NAME from $SANDBOX_IMAGE"
+  openshell sandbox create "${args[@]}" -- can-i web --host 127.0.0.1 --port "$TARGET_PORT"
+fi
+
+# -- 3. forward until stopped ---------------------------------------------------------
+fwd=""
+shutdown() {
+  [ -n "$fwd" ] && kill "$fwd" 2>/dev/null
+  if [ "$DELETE_ON_EXIT" = true ]; then
+    log "deleting sandbox $SANDBOX_NAME"
+    openshell sandbox delete "$SANDBOX_NAME" >/dev/null 2>&1 || true
+  fi
+  exit 0
+}
+trap shutdown TERM INT
+
+log "forwarding 0.0.0.0:$FORWARD_PORT -> $SANDBOX_NAME:$TARGET_PORT"
+while true; do
+  # fails while the sandbox is still starting; retry until the dashboard answers
+  openshell forward service --target-port "$TARGET_PORT" --local "0.0.0.0:$FORWARD_PORT" "$SANDBOX_NAME" &
+  fwd=$!
+  wait "$fwd" || true
+  fwd=""
+  log "forward exited; retrying in 3s"
+  sleep 3
+done

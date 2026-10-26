@@ -1,0 +1,16 @@
+apiVersion: ai-factory.suse.com/v1alpha1
+kind: BlueprintCatalog
+metadata:
+  # Catalog identity (DNS-1123, <=40 chars). Keep it the same as the
+  # `blueprintCatalogs[].name` registered in Settings / the aif-operator values.
+  name: can-i
+spec:
+  displayName: can-i OpenShell lab
+  description: Run an agent workload in an NVIDIA OpenShell sandbox on Kubernetes and watch, live, what its policy allows and denies.
+  categories: [demo, security, ai-agents]
+  maintainer:
+    name: WiredQuill
+    url: https://github.com/wiredquill
+  blueprints:
+    # `name` must match each Blueprint's ai-factory.suse.com/blueprint-name label.
+    - name: can-i-openshell
