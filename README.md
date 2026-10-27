@@ -131,7 +131,7 @@ Every denied check falls into one of three groups, and its "How to allow this" p
 
 | Fix | Checks |
 |---|---|
-| **Live policy update** (network rules hot-reload) | curl to one.one.one.one, nmap to suse.com:443 (adds nmap's binary to the rule curl already uses) |
+| **Live policy update** (network rules hot-reload) | curl to one.one.one.one, nmap to suse.com:443 (its own `can-i-nmap` rule: adding nmap to curl's rule would change curl's access too, which OpenShell refuses) |
 | **Recreate the sandbox** (filesystem rules) | write to `/var/tmp`: add it to *Extra read-write paths* in the can-i app |
 | **OpenShell hard limit** (no policy can grant it) | ping (ICMP; no `CAP_NET_RAW`, TCP-only proxy), the `169.254.169.254` metadata endpoint (raw IPs can't be granted), `unshare` (seccomp) |
 

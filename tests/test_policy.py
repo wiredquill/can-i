@@ -248,14 +248,15 @@ def test_fix_for_curl_to_same_host_is_live():
     assert fix["live"] is True
 
 
-def test_fix_for_nmap_adds_its_binary_to_the_egress_rule():
+def test_fix_for_nmap_uses_its_own_rule_and_a_plain_tcp_endpoint():
     from cani.policy import fix_for_check
 
     check = Check(id="n", name="nmap", category="network",
                   command="sh -c 'nmap -sT -Pn --system-dns -p443 suse.com | grep -q \"443/tcp open\"'")
     fix = fix_for_check(check, "can-i")
     assert re.search(r"--binary \S*/nmap ", fix["command"])
-    assert "--add-endpoint suse.com:443" in fix["command"]
+    assert "--rule-name can-i-nmap " in fix["command"]
+    assert "--add-endpoint suse.com:443 --wait" in fix["command"]
     assert fix["live"] is True
 
 
