@@ -16,7 +16,7 @@
 ├─────────┼────────────────────────────┼────────────┼──────┼─────────┤
 │ ALLOWED │ Outbound HTTPS (suse.com)  │ network    │ 0    │ 312 ms  │
 │ DENIED  │ Read /etc/shadow           │ filesystem │ 1    │ 4 ms    │
-│ DENIED  │ Ping one.one.one.one (ICMP)│ network    │ 2    │ 6 ms    │
+│ DENIED  │ Ping 1.1.1.1 (ICMP)        │ network    │ 2    │ 6 ms    │
 └─────────┴────────────────────────────┴────────────┴──────┴─────────┘
 ```
 
