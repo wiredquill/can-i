@@ -28,6 +28,8 @@ LABEL org.opencontainers.image.title="can-i client" \
       org.opencontainers.image.source="https://github.com/wiredquill/can-i"
 COPY --from=cli /usr/local/bin/openshell /usr/local/bin/openshell
 COPY can-i-client /usr/local/bin/can-i-client
+# openshell sandbox connect runs the ssh client
+RUN zypper -n install --no-recommends openssh-clients && zypper -n clean -a
 RUN useradd --system --uid 10001 --create-home client
 USER 10001
 WORKDIR /home/client
