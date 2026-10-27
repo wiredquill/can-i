@@ -1,4 +1,6 @@
 """Tests for OpenShell policy <-> checks.yaml interop."""
+import re
+
 import pytest
 
 from cani.config import Check, load_config
@@ -213,7 +215,7 @@ def test_fix_for_filesystem_check_needs_recreate():
 def test_fix_for_ungrantable_check_explains_why():
     from cani.policy import fix_for_check
 
-    check = Check(id="p", name="p", category="network", command="ping -c1 1.1.1.1")
+    check = Check(id="s", name="s", category="process", command="sh -c 'exit 0'")
     fix = fix_for_check(check, "can-i")
     assert fix["command"] is None and fix["yaml"] is None
     assert "can't express" in fix["note"]
@@ -225,3 +227,57 @@ def test_fix_flags_baseline_denials():
     check = Check(id="r", name="r", category="filesystem", command="head -c1 /etc/shadow")
     fix = fix_for_check(check, "can-i", blocker_kind="baseline")
     assert "won't flip it" in fix["note"]
+
+
+def test_fix_for_ping_explains_icmp_cannot_be_granted():
+    from cani.policy import fix_for_check
+
+    check = Check(id="p", name="ping", category="network", command="ping -c1 -W2 one.one.one.one")
+    fix = fix_for_check(check, "can-i")
+    assert fix["command"] is None
+    assert "No OpenShell policy can grant ping" in fix["note"]
+
+
+def test_fix_for_curl_to_same_host_is_live():
+    from cani.policy import fix_for_check
+
+    check = Check(id="c", name="curl", category="network",
+                  command="curl -fsS --max-time 3 -o /dev/null https://one.one.one.one")
+    fix = fix_for_check(check, "can-i")
+    assert "--add-endpoint one.one.one.one:443" in fix["command"]
+    assert fix["live"] is True
+
+
+def test_fix_for_nmap_adds_its_binary_to_the_egress_rule():
+    from cani.policy import fix_for_check
+
+    check = Check(id="n", name="nmap", category="network",
+                  command="sh -c 'nmap -sT -Pn --system-dns -p443 suse.com | grep -q \"443/tcp open\"'")
+    fix = fix_for_check(check, "can-i")
+    assert re.search(r"--binary \S*/nmap ", fix["command"])
+    assert "--add-endpoint suse.com:443" in fix["command"]
+    assert fix["live"] is True
+
+
+@pytest.mark.parametrize("command,word", [
+    ("curl -fsS -o /dev/null http://169.254.169.254/", "metadata"),
+    ("curl -fsS -o /dev/null http://10.0.0.1/", "raw IP"),
+    ("unshare --user --map-root-user true", "seccomp"),
+])
+def test_hard_limits_have_no_fix(command, word):
+    from cani.policy import fix_for_check
+
+    cat = "process" if command.startswith("unshare") else "network"
+    fix = fix_for_check(Check(id="h", name="h", category=cat, command=command), "can-i")
+    assert fix["command"] is None and fix.get("limit") is True
+    assert word in fix["note"]
+
+
+def test_fix_for_var_tmp_write_points_at_the_app_form():
+    from cani.policy import fix_for_check
+
+    check = Check(id="w", name="w", category="filesystem",
+                  command="sh -c 'touch /var/tmp/.can-i-probe && rm -f /var/tmp/.can-i-probe'")
+    fix = fix_for_check(check, "can-i")
+    assert "- /var/tmp" in fix["yaml"]
+    assert "Extra read-write paths" in fix["note"]

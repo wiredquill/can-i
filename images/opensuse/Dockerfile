@@ -19,8 +19,16 @@ LABEL org.opencontainers.image.title="can-i (openSUSE Leap 16.0)" \
       org.opencontainers.image.description="Security capability inspector and sandbox demo dashboard (TUI + Web)" \
       org.opencontainers.image.source="https://github.com/wiredquill/can-i"
 
-# curl/getent/unshare back the default probes; ping, nmap and sudo stay absent
-RUN zypper -n install --no-recommends python313 curl util-linux shadow && zypper -n clean -a
+# curl/getent/unshare/ping back the default probes
+RUN zypper -n install --no-recommends python313 curl util-linux shadow iputils && zypper -n clean -a
+# nmap isn't in Leap 16.0 itself. The network:utilities project builds it for
+# x86_64 only, so on arm64 the nmap check reports "not installed".
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = amd64 ]; then \
+      zypper -n addrepo https://download.opensuse.org/repositories/network:/utilities/16.0/network:utilities.repo \
+   && zypper -n --gpg-auto-import-keys install --no-recommends nmap \
+   && zypper -n removerepo network_utilities && zypper -n clean -a; \
+    fi
 COPY --from=builder /opt/can-i /opt/can-i
 RUN ln -s /opt/can-i/bin/can-i /usr/local/bin/can-i
 COPY checks.yaml /etc/can-i/checks.yaml

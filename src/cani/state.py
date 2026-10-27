@@ -81,17 +81,32 @@ class ProbeState:
     # -- live configuration ----------------------------------------------------
 
     def update_config(self, text: str) -> Config:
-        """Validate, persist, and hot-reload a new checks.yaml."""
-        cfg = save_config(self.config_path, text)  # raises before touching state
+        """Validate, persist, and hot-reload a new checks.yaml.
+
+        When the config file can't be written (the image's /etc/can-i is
+        read-only inside an OpenShell sandbox), the edit is saved to
+        ~/.config/can-i/checks.yaml instead, which becomes the live config.
+        """
+        try:
+            cfg = save_config(self.config_path, text)  # raises before touching state
+        except OSError:
+            override = Path.home() / ".config" / "can-i" / "checks.yaml"
+            if self.config_path == override:
+                raise
+            override.parent.mkdir(parents=True, exist_ok=True)
+            cfg = save_config(override, text)
+            self.config_path = override
         self.config = cfg
         known = {c.id for c in cfg.checks}
         self.results = {k: v for k, v in self.results.items() if k in known}
         for c in cfg.checks:
-            self.results.setdefault(
-                c.id,
-                ProbeResult(
+            old = self.results.get(c.id)
+            # a changed check starts over, so the old result isn't shown against the new command
+            if old is None or (old.name, old.category, old.command, old.expect) != (
+                c.name, c.category, c.command, c.expect
+            ):
+                self.results[c.id] = ProbeResult(
                     id=c.id, name=c.name, category=c.category, command=c.command,
                     expect=c.expect, status=Status.RUNNING,
-                ),
-            )
+                )
         return cfg

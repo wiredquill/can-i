@@ -915,12 +915,26 @@ function openDrawer(id) {
   dr.classList.add("open");
   if (v === "denied") loadFix(id);
 }
+// navigator.clipboard only exists on secure pages (https or localhost); the
+// dashboard is usually plain http on a NodePort, so fall back to execCommand.
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.setAttribute("readonly", "");
+  ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch {}
+  ta.remove();
+  return ok;
+}
 // The policy change that flips a denied check to allowed: CLI command by default, YAML on request.
 async function loadFix(id) {
   const resp = await fetch(`/api/fix/${encodeURIComponent(id)}`);
   const box = $("#fix");
   if (!box || !resp.ok) { if (box) box.querySelector(".note").textContent = "could not build a fix"; return; }
   const f = await resp.json();
+  if (f.limit) box.querySelector("h4").innerHTML = `${icon("lock")} An OpenShell hard limit`;
   const head = box.querySelector("h4").outerHTML;
   if (!f.command) { box.innerHTML = `${head}<div class="note">${esc(f.note)}</div>`; return; }
   box.innerHTML = `${head}
@@ -938,9 +952,9 @@ async function loadFix(id) {
   };
   box.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => { view = b.dataset.view; show(); }));
   box.querySelector(".copy").addEventListener("click", async (e) => {
-    try { await navigator.clipboard.writeText(f[view]); e.target.textContent = "Copied"; }
-    catch { e.target.textContent = "Copy failed"; }
-    setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
+    const btn = e.currentTarget;
+    btn.textContent = await copyText(f[view]) ? "Copied" : "Copy failed";
+    setTimeout(() => { btn.textContent = "Copy"; }, 1500);
   });
   show();
 }
@@ -967,12 +981,14 @@ async function loadConfigEditor() {
 $("#reload-cfg").addEventListener("click", loadConfigEditor);
 $("#save-cfg").addEventListener("click", async () => {
   const resp = await fetch("/api/config", { method: "PUT", body: $("#yaml").value });
-  if (resp.status === 422) {
-    const body = await resp.json();
-    $("#cfgerr").textContent = body.detail || "invalid configuration";
-  } else {
+  if (resp.ok) {
     $("#cfgerr").textContent = "";
-    toast("info", "configuration applied", 2500);
+    toast("info", "Configuration applied, re-running probes", 2500);
+    runNow();
+  } else {
+    let detail = "";
+    try { detail = (await resp.json()).detail; } catch {}
+    $("#cfgerr").textContent = detail || `Save failed (HTTP ${resp.status})`;
   }
 });
 

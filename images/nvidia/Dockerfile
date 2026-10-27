@@ -21,9 +21,9 @@ LABEL org.opencontainers.image.title="can-i (NVIDIA base Ubuntu 24.04)" \
       org.opencontainers.image.description="Security capability inspector and sandbox demo dashboard (TUI + Web)" \
       org.opencontainers.image.source="https://github.com/wiredquill/can-i"
 
-# curl/getent/unshare back the default probes; ping, nmap and sudo stay absent
+# curl/getent/unshare/ping/nmap back the default probes
 RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 curl ca-certificates util-linux \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 curl ca-certificates util-linux iputils-ping nmap \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /opt/can-i /opt/can-i
 RUN ln -s /opt/can-i/bin/can-i /usr/local/bin/can-i
