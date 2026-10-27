@@ -249,3 +249,72 @@ def checks_to_policy(config: Config) -> str:
         for oid in omitted:
             out += f"#   - {oid}\n"
     return out
+
+
+# ---------------------------------------------------------------------------
+# single denied check -> how to allow it
+# ---------------------------------------------------------------------------
+
+FIX_RULE_NAME = "can-i-egress"  # same rule the README demo grows and removes
+
+
+def fix_for_check(check: Check, sandbox: str, blocker_kind: str | None = None) -> dict:
+    """Explain how to flip one check to ALLOWED under OpenShell.
+
+    Returns {"command", "yaml", "note", "live"}: `command` is the openshell CLI
+    invocation (None when no policy change can grant it), `yaml` the policy
+    fragment that grants it, `live` whether the change hot-reloads.
+    """
+    granted = check.model_copy(update={"expect": None})
+    fragment = checks_to_policy(Config(checks=[granted]))
+    policy = yaml.safe_load(fragment) or {}
+    has_grant = "filesystem_policy" in policy or "network_policies" in policy
+    sb = shlex.quote(sandbox)
+
+    if blocker_kind == "baseline":
+        note = ("This denial is not the sandbox's doing — it is denied without a sandbox too "
+                "(missing binary, unix permissions, no route). A policy change alone won't flip it.")
+    else:
+        note = ""
+
+    if not has_grant:
+        return {
+            "command": None,
+            "yaml": None,
+            "live": False,
+            "note": note or ("OpenShell policy can't express a grant for this probe — only filesystem "
+                             "paths and HTTP(S) egress endpoints are policy-controlled. Raw sockets, "
+                             "capabilities and syscalls come from the sandbox runtime itself."),
+        }
+
+    if "network_policies" in policy:
+        rule = policy["network_policies"][FIX_RULE_NAME]
+        binary = rule["binaries"][0]["path"]
+        lines = [
+            f"openshell policy update {sb} \\\n"
+            f"  --rule-name {FIX_RULE_NAME} --binary {shlex.quote(binary)} \\\n"
+            f"  --add-endpoint {ep['host']}:{ep['port']}:read-only:rest:enforce --wait"
+            for ep in rule["endpoints"]
+        ]
+        return {
+            "command": "\n".join(lines),
+            "yaml": fragment,
+            "live": True,
+            "note": note or "Network rules hot-reload — the card flips on the next run.",
+        }
+
+    # filesystem grants are fixed at sandbox creation
+    return {
+        "command": (
+            "# merge the YAML fragment into your policy file (policy.yaml), then recreate:\n"
+            f"openshell sandbox delete {sb}\n"
+            f"openshell sandbox create --name {sb} \\\n"
+            "  --from ghcr.io/wiredquill/can-i:latest \\\n"
+            "  --policy policy.yaml \\\n"
+            "  --detach -- can-i web --host 0.0.0.0 --port 8000"
+        ),
+        "yaml": fragment,
+        "live": False,
+        "note": note or ("Filesystem policy is fixed when the sandbox is created — add the fragment "
+                         "to your policy file and recreate the sandbox."),
+    }

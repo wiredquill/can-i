@@ -198,3 +198,30 @@ def load_config_text(text: str):
     from cani.config import parse_config
 
     return parse_config(text)
+
+
+def test_fix_for_filesystem_check_needs_recreate():
+    from cani.policy import fix_for_check
+
+    check = Check(id="w", name="w", category="filesystem", command="touch /etc/x", expect="denied")
+    fix = fix_for_check(check, "can-i")
+    assert "- /etc" in fix["yaml"]
+    assert "openshell sandbox create --name can-i" in fix["command"]
+    assert fix["live"] is False
+
+
+def test_fix_for_ungrantable_check_explains_why():
+    from cani.policy import fix_for_check
+
+    check = Check(id="p", name="p", category="network", command="ping -c1 1.1.1.1")
+    fix = fix_for_check(check, "can-i")
+    assert fix["command"] is None and fix["yaml"] is None
+    assert "can't express" in fix["note"]
+
+
+def test_fix_flags_baseline_denials():
+    from cani.policy import fix_for_check
+
+    check = Check(id="r", name="r", category="filesystem", command="head -c1 /etc/shadow")
+    fix = fix_for_check(check, "can-i", blocker_kind="baseline")
+    assert "won't flip it" in fix["note"]
