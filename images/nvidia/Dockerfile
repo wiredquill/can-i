@@ -23,7 +23,7 @@ LABEL org.opencontainers.image.title="can-i (NVIDIA base Ubuntu 24.04)" \
 
 # curl/getent/unshare/ping/nmap back the default probes
 RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 curl ca-certificates util-linux iputils-ping nmap \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 curl ca-certificates util-linux iputils-ping nmap git \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /opt/can-i /opt/can-i
 RUN ln -s /opt/can-i/bin/can-i /usr/local/bin/can-i

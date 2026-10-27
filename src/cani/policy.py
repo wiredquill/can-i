@@ -332,10 +332,19 @@ def fix_for_check(check: Check, sandbox: str, blocker_kind: str | None = None) -
     if "network_policies" in policy:
         rule = policy["network_policies"][FIX_RULE_NAME]
         binary = rule["binaries"][0]["path"]
+        tool = binary.rsplit("/", 1)[-1]
+        # Any binary but curl gets its own rule: adding an endpoint to the
+        # curl rule would change curl's access too, which OpenShell refuses.
+        rule_name = FIX_RULE_NAME if tool == "curl" else f"can-i-{_slug(tool)}"
+        # curl's probes are GETs, so its endpoints get read-only REST. Other
+        # binaries get no HTTP inspection: nmap sends no HTTP, and git
+        # fetches with POST, which read-only would block.
+        rest = ":read-only:rest:enforce" if tool == "curl" else ""
         lines = [
             f"openshell policy update {sb} \\\n"
-            f"  --rule-name {FIX_RULE_NAME} --binary {shlex.quote(binary)} \\\n"
-            f"  --add-endpoint {ep['host']}:{ep['port']}:read-only:rest:enforce --wait"
+            f"  --rule-name {rule_name} --binary {shlex.quote(binary)} \\\n"
+            f"  --add-endpoint {ep['host']}:{ep['port']}"
+f"{rest} --wait"
             for ep in rule["endpoints"]
         ]
         return {
