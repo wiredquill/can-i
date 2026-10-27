@@ -2,6 +2,13 @@
 {{- .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{/* The client Deployment and its pod (<release>-client-...): the openshell CLI
+     that creates the sandbox and forwards its UI. The sandbox pod, with the
+     OpenShell supervisor, is named after the sandbox (sandbox.name). */}}
+{{- define "can-i.clientName" -}}
+{{- printf "%s-client" (include "can-i.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "can-i.labels" -}}
 app.kubernetes.io/name: can-i
 app.kubernetes.io/instance: {{ .Release.Name }}

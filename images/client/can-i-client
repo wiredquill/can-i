@@ -12,7 +12,7 @@ set -euo pipefail
 : "${GATEWAY_ENDPOINT:=https://openshell:8080}"
 : "${GATEWAY_NAME:=k8s}"
 : "${TLS_DIR:=/etc/openshell/tls}"
-: "${SANDBOX_NAME:=can-i}"
+: "${SANDBOX_NAME:=can-i-sandbox}"
 : "${SANDBOX_IMAGE:?SANDBOX_IMAGE is required}"
 : "${POLICY_FILE:=/etc/can-i/policy.yaml}"
 : "${SANDBOX_GPU:=false}"

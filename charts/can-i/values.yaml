@@ -3,8 +3,9 @@
 # Install into the same namespace as the openshell-gateway chart.
 
 sandbox:
-  # Sandbox name in OpenShell (`openshell sandbox get <name>`).
-  name: can-i
+  # Sandbox name in OpenShell (`openshell sandbox get <name>`). The sandbox pod,
+  # which runs the workload and the OpenShell supervisor, is named after it.
+  name: can-i-sandbox
   # Which can-i image the sandbox runs: suse | opensuse | nvidia | custom
   image: suse
   images:

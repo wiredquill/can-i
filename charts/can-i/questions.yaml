@@ -12,10 +12,10 @@ questions:
     - custom
   description: >-
     The OpenShell child container can-i runs in.
-    <b>suse</b> = SUSE BCI (ghcr.io/wiredquill/can-i),
-    <b>opensuse</b> = openSUSE Leap 16.0 (ghcr.io/wiredquill/can-i-opensuse),
-    <b>nvidia</b> = NVIDIA base Ubuntu 24.04, the OpenShell chart's default sandbox base (ghcr.io/wiredquill/can-i-nvidia),
-    <b>custom</b> = your own image below.
+    suse = SUSE BCI (ghcr.io/wiredquill/can-i),
+    opensuse = openSUSE Leap 16.0 (ghcr.io/wiredquill/can-i-opensuse),
+    nvidia = NVIDIA base Ubuntu 24.04, the OpenShell chart's default sandbox base (ghcr.io/wiredquill/can-i-nvidia),
+    custom = your own image below.
     Changing it recreates the sandbox.
 - variable: sandbox.customImage
   label: Custom sandbox image
@@ -29,9 +29,9 @@ questions:
   label: Sandbox name
   group: Sandbox
   type: string
-  default: can-i
+  default: can-i-sandbox
   required: true
-  description: Name in OpenShell, used by <code>openshell sandbox connect</code> and <code>openshell policy update</code>.
+  description: Name in OpenShell, used by openshell sandbox connect and openshell policy update.
 - variable: sandbox.gpu
   label: Request a GPU
   group: Sandbox
@@ -51,9 +51,9 @@ questions:
   type: string
   default: "suse.com:443"
   description: >-
-    Comma-separated host:port that /usr/bin/curl may reach, e.g. <code>suse.com:443,opensuse.org:443</code>.
+    Comma-separated host:port that /usr/bin/curl may reach, e.g. suse.com:443,opensuse.org:443.
     Leave blank to start with all network access denied. Network rules can also be changed live with
-    <code>openshell policy update</code>.
+    openshell policy update.
 - variable: policy.extraReadOnly
   label: Extra read-only paths
   group: Starting policy
@@ -89,7 +89,7 @@ questions:
   description: >-
     How browsers outside the cluster reach the dashboard. The sandbox itself has no inbound network:
     this app's client pod forwards the dashboard out of it through the gateway.
-    For ClusterIP use the Ingress below or <code>kubectl port-forward</code>.
+    For ClusterIP use the Ingress below or kubectl port-forward.
 - variable: service.nodePort
   label: NodePort
   group: Dashboard
