@@ -293,7 +293,7 @@ def checks_to_policy(config: Config) -> str:
 # single denied check -> how to allow it
 # ---------------------------------------------------------------------------
 
-FIX_RULE_NAME = "can-i-egress"  # same rule the README demo grows and removes
+FIX_RULE_NAME = "can-i-egress"  # the rule checks_to_policy emits
 
 
 def fix_for_check(check: Check, sandbox: str, blocker_kind: str | None = None) -> dict:
@@ -333,9 +333,10 @@ def fix_for_check(check: Check, sandbox: str, blocker_kind: str | None = None) -
         rule = policy["network_policies"][FIX_RULE_NAME]
         binary = rule["binaries"][0]["path"]
         tool = binary.rsplit("/", 1)[-1]
-        # Any binary but curl gets its own rule: adding an endpoint to the
-        # curl rule would change curl's access too, which OpenShell refuses.
-        rule_name = FIX_RULE_NAME if tool == "curl" else f"can-i-{_slug(tool)}"
+        # Each binary gets its own rule, never the chart's can-i-egress: adding
+        # an endpoint to a rule changes the access of every binary already in
+        # it, which OpenShell refuses unless they are all declared.
+        rule_name = f"can-i-{_slug(tool)}"
         # curl's probes are GETs, so its endpoints get read-only REST. Other
         # binaries get no HTTP inspection: nmap sends no HTTP, and git
         # fetches with POST, which read-only would block.
