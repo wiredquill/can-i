@@ -20,5 +20,5 @@ Stage mode in your terminal (a shell inside the sandbox, then the TUI):
 
 Grant access live and watch the dashboard flip:
   kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "can-i.clientName" . }} -- \
-    openshell policy update {{ .Values.sandbox.name }} --rule-name can-i-egress --binary /usr/bin/curl \
+    openshell policy update {{ .Values.sandbox.name }} --rule-name can-i-curl --binary /usr/bin/curl \
     --add-endpoint opensuse.org:443:read-only:rest:enforce --wait
