@@ -16,7 +16,7 @@
 ├─────────┼────────────────────────────┼────────────┼──────┼─────────┤
 │ ALLOWED │ Outbound HTTPS (suse.com)  │ network    │ 0    │ 312 ms  │
 │ DENIED  │ Read /etc/shadow           │ filesystem │ 1    │ 4 ms    │
-│ DENIED  │ Ping one.one.one.one (ICMP)│ network    │ 2    │ 6 ms    │
+│ DENIED  │ Write to /var/tmp          │ filesystem │ 1    │ 3 ms    │
 └─────────┴────────────────────────────┴────────────┴──────┴─────────┘
 ```
 
@@ -26,7 +26,7 @@ Probes are defined in [`checks.yaml`](checks.yaml) — one benign shell command 
 
 | Category | Examples |
 |---|---|
-| `network` | outbound HTTPS, DNS lookups, ping vs curl to the same host, nmap vs curl to the same host, cloud metadata endpoint |
+| `network` | outbound HTTPS, DNS lookups, an unlisted host (curl), nmap vs curl to the same host, git to github.com |
 | `filesystem` | read `/etc/shadow`, write `/var/tmp` vs `/tmp`, exec from `noexec` mounts |
 | `process` | spawn `sh`/`curl`, `unshare` user namespaces |
 
@@ -131,9 +131,9 @@ Every denied check falls into one of three groups, and its "How to allow this" p
 
 | Fix | Checks |
 |---|---|
-| **Live policy update** (network rules hot-reload) | curl to one.one.one.one, nmap to suse.com:443 (its own `can-i-nmap` rule: adding nmap to curl's rule would change curl's access too, which OpenShell refuses) |
+| **Live policy update** (network rules hot-reload) | curl to one.one.one.one; nmap to suse.com:443 and git to github.com:443, each in its own `can-i-<binary>` rule (adding them to curl's rule would change curl's access too, which OpenShell refuses) |
 | **Recreate the sandbox** (filesystem rules) | write to `/var/tmp`: add it to *Extra read-write paths* in the can-i app |
-| **OpenShell hard limit** (no policy can grant it) | ping (ICMP; no `CAP_NET_RAW`, TCP-only proxy), the `169.254.169.254` metadata endpoint (raw IPs can't be granted), `unshare` (seccomp) |
+| **OpenShell hard limit** (no policy can grant it) | `unshare` (seccomp). Checks you add for ping or a raw IP address are labeled hard limits too |
 
 `/etc/shadow` is the control: unix file permissions deny it with or without a sandbox.
 
@@ -166,8 +166,8 @@ required; the dashboard on :8477 is served from INSIDE the sandbox. If it still 
 check the host firewall allows :8477 and that the web workload is up
 (`openshell sandbox connect can-i`, then `curl -s localhost:8000 | head`).
 
-On OpenShell v0.1.5: suse.com, DNS and `/tmp` are allowed; the metadata endpoint is denied by
-OpenShell egress and `unshare` by seccomp. `/etc/shadow` is denied by unix file permissions
+On OpenShell v0.1.5: suse.com, DNS and `/tmp` are allowed; one.one.one.one, nmap and git are denied by
+OpenShell egress until a policy update, and `unshare` by seccomp. `/etc/shadow` is denied by unix file permissions
 (the workload runs as uid 10001) before Landlock is consulted; the "Blocked by" column shows
 which layer said no. `/var/tmp` is world-writable, so its denial is Landlock's.
 

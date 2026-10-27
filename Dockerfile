@@ -15,7 +15,7 @@ LABEL org.opencontainers.image.title="can-i" \
       org.opencontainers.image.source="https://github.com/wiredquill/can-i"
 
 # ping and nmap so their probes are denied by the sandbox, not by a missing binary
-RUN zypper -n install --no-recommends iputils nmap && zypper -n clean -a
+RUN zypper -n install --no-recommends git-core iputils nmap && zypper -n clean -a
 COPY --from=builder /install /usr/local
 COPY checks.yaml /etc/can-i/checks.yaml
 

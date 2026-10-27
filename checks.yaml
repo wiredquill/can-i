@@ -23,28 +23,20 @@ checks:
     description: Name resolution via NSS/DNS.
     expect: allowed
 
-  # ping and curl to the same host: a policy update can grant the HTTPS
-  # connection, but nothing in an OpenShell policy can grant ICMP.
-  - id: net-raw-socket-ping
-    name: Ping one.one.one.one (ICMP)
-    category: network
-    command: ping -c1 -W2 one.one.one.one
-    description: ICMP needs CAP_NET_RAW or a ping socket; OpenShell only proxies TCP, so no policy grants it.
-    expect: denied
-
   - id: net-https-cloudflare
     name: HTTPS to one.one.one.one (curl)
     category: network
     command: curl -fsS --max-time 3 -o /dev/null https://one.one.one.one
-    description: Same host as the ping check, over TCP. Denied until a policy grants it.
+    description: A host the policy doesn't list. Denied until a policy update grants it.
 
-  - id: net-http-metadata
-    name: Cloud metadata endpoint
+  # An agent fetching code: git is denied until a rule names git and
+  # github.com. The rule also covers git-remote-https, which git starts.
+  - id: net-git-github
+    name: Git ls-remote github.com (git)
     category: network
-    timeout: 3
-    command: curl -fsS --max-time 2 -o /dev/null http://169.254.169.254/
-    description: Link-local metadata service. An OpenShell hard limit; no policy can grant a raw IP.
-    expect: denied
+    timeout: 8
+    command: git ls-remote --exit-code https://github.com/wiredquill/can-i HEAD
+    description: A second program fetching over HTTPS. Denied until a rule grants git.
 
   # nmap to a host curl may already reach: egress rules name the binaries
   # allowed to use them, so nmap is denied until it is added to the rule.

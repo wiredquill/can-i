@@ -336,14 +336,15 @@ def fix_for_check(check: Check, sandbox: str, blocker_kind: str | None = None) -
         # Any binary but curl gets its own rule: adding an endpoint to the
         # curl rule would change curl's access too, which OpenShell refuses.
         rule_name = FIX_RULE_NAME if tool == "curl" else f"can-i-{_slug(tool)}"
-        # nmap only opens a TCP connection, so its endpoint gets no HTTP
-        # inspection; HTTP clients get read-only REST.
-        raw_tcp = {(ep["host"], ep["port"]) for ep in _nmap_endpoints(check.command)}
+        # curl's probes are GETs, so its endpoints get read-only REST. Other
+        # binaries get no HTTP inspection: nmap sends no HTTP, and git
+        # fetches with POST, which read-only would block.
+        rest = ":read-only:rest:enforce" if tool == "curl" else ""
         lines = [
             f"openshell policy update {sb} \\\n"
             f"  --rule-name {rule_name} --binary {shlex.quote(binary)} \\\n"
             f"  --add-endpoint {ep['host']}:{ep['port']}"
-            f"{'' if (ep['host'], ep['port']) in raw_tcp else ':read-only:rest:enforce'} --wait"
+f"{rest} --wait"
             for ep in rule["endpoints"]
         ]
         return {

@@ -260,6 +260,16 @@ def test_fix_for_nmap_uses_its_own_rule_and_a_plain_tcp_endpoint():
     assert fix["live"] is True
 
 
+def test_fix_for_git_uses_its_own_rule_without_read_only():
+    from cani.policy import fix_for_check
+
+    check = Check(id="g", name="git", category="network",
+                  command="git ls-remote --exit-code https://github.com/wiredquill/can-i HEAD")
+    fix = fix_for_check(check, "can-i")
+    assert "--rule-name can-i-git " in fix["command"]
+    assert "--add-endpoint github.com:443 --wait" in fix["command"]
+
+
 @pytest.mark.parametrize("command,word", [
     ("curl -fsS -o /dev/null http://169.254.169.254/", "metadata"),
     ("curl -fsS -o /dev/null http://10.0.0.1/", "raw IP"),
