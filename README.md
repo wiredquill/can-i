@@ -176,8 +176,8 @@ of its sandboxes. Three Helm charts, each with a Rancher install form (`question
 
 | Chart | What it installs |
 |---|---|
-| [`charts/agent-sandbox`](charts/agent-sandbox) 1.0.9 | **OpenShell 1 - Agent Sandbox controller**: the `Sandbox` CRD + controller OpenShell's Kubernetes driver needs. Install first, **once per cluster** |
-| [`charts/openshell-gateway`](charts/openshell-gateway) 0.1.7 | **OpenShell 2 - Gateway**: NVIDIA's OpenShell 0.1.5 chart (vendored, with a small [form patch](charts/openshell-gateway/nvidia-chart.patch)) and the [openshell-lab](https://github.com/wiredquill/openshell-lab) defaults. Creates no sandbox |
+| [`charts/agent-sandbox`](charts/agent-sandbox) 1.0.10 | **OpenShell 1 - Agent Sandbox controller**: the `Sandbox` CRD + controller OpenShell's Kubernetes driver needs. Install first, **once per cluster** |
+| [`charts/openshell-gateway`](charts/openshell-gateway) 0.1.8 | **OpenShell 2 - Gateway**: NVIDIA's OpenShell 0.1.5 chart (vendored, with a small [form patch](charts/openshell-gateway/nvidia-chart.patch)) and the [openshell-lab](https://github.com/wiredquill/openshell-lab) defaults. Creates no sandbox |
 | [`charts/can-i`](charts/can-i) 0.1.2 | **OpenShell 3 - can-i sandbox**: a client pod (the `openshell` CLI) that creates the can-i sandbox and serves its dashboard |
 
 The can-i form's **Sandbox image** dropdown picks the OpenShell child container:
