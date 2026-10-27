@@ -144,10 +144,15 @@ hot-reload; filesystem/process changes need a sandbox recreate):
 # grant another destination: the matching badge flips DENIED -> ALLOWED
 # (endpoint value = host:port:access:protocol:enforcement)
 openshell policy update can-i \
-  --rule-name can-i-egress --binary /usr/bin/curl \
+  --rule-name can-i-curl --binary /usr/bin/curl \
   --add-endpoint opensuse.org:443:read-only:rest:enforce --wait
 
-# pull the plug: every network badge goes red
+# reset: remove the rules the demo added, one per binary
+for r in can-i-curl can-i-nmap can-i-git; do
+  openshell policy update can-i --remove-rule $r --wait
+done
+
+# pull the plug: remove the app's own rule and suse.com goes red too
 openshell policy update can-i --remove-rule can-i-egress --wait
 
 # verify what the sandbox actually enforces
@@ -216,7 +221,7 @@ lists it for the operator's catalog sync.
 ```bash
 kubectl -n <ns> exec -it deploy/can-i-client -- openshell sandbox connect can-i-sandbox   # then: can-i tui --stage
 kubectl -n <ns> exec deploy/can-i-client -- openshell policy update can-i-sandbox \
-  --rule-name can-i-egress --binary /usr/bin/curl \
+  --rule-name can-i-curl --binary /usr/bin/curl \
   --add-endpoint opensuse.org:443:read-only:rest:enforce --wait
 ```
 **Access from outside the cluster.** The dashboard is on the can-i Service (NodePort by

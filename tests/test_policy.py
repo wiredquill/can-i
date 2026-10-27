@@ -245,6 +245,7 @@ def test_fix_for_curl_to_same_host_is_live():
                   command="curl -fsS --max-time 3 -o /dev/null https://one.one.one.one")
     fix = fix_for_check(check, "can-i")
     assert "--add-endpoint one.one.one.one:443" in fix["command"]
+    assert "--rule-name can-i-curl " in fix["command"]
     assert fix["live"] is True
 
 
