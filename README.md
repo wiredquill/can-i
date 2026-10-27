@@ -212,8 +212,8 @@ lists it for the operator's catalog sync.
 
 **Drive the demo** through the client pod, which also works as your `openshell` CLI:
 ```bash
-kubectl -n <ns> exec -it deploy/can-i -- openshell sandbox connect can-i   # then: can-i tui --stage
-kubectl -n <ns> exec deploy/can-i -- openshell policy update can-i \
+kubectl -n <ns> exec -it deploy/can-i-client -- openshell sandbox connect can-i-sandbox   # then: can-i tui --stage
+kubectl -n <ns> exec deploy/can-i-client -- openshell policy update can-i-sandbox \
   --rule-name can-i-egress --binary /usr/bin/curl \
   --add-endpoint opensuse.org:443:read-only:rest:enforce --wait
 ```

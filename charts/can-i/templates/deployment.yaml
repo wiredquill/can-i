@@ -1,9 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "can-i.fullname" . }}
+  name: {{ include "can-i.clientName" . }}
   labels:
     {{- include "can-i.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openshell-client
 spec:
   replicas: 1
   # One sandbox per release: the old pod must delete its sandbox before the new
@@ -17,6 +18,7 @@ spec:
     metadata:
       labels:
         {{- include "can-i.selector" . | nindent 8 }}
+        app.kubernetes.io/component: openshell-client
       annotations:
         # restart (and so recreate the sandbox) when the policy or image changes
         checksum/policy: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}

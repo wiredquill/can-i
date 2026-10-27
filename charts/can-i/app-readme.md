@@ -16,11 +16,12 @@ Ubuntu**. Same probes and policy, different base image.
 - Install can-i in the **same namespace** as the gateway. It reads the gateway's
   `openshell-client-tls` Secret.
 
-**What it creates:** one small client pod (the `openshell` CLI). It creates the sandbox
-through the gateway, forwards the dashboard to a Service (`svc/can-i`, NodePort by default:
-open `http://<node-ip>:<nodePort>`), and deletes the sandbox when you
-uninstall. The pod also works as your CLI:
+**What it creates:** two pods. The client pod `can-i-client-...` runs the `openshell` CLI;
+the sandbox pod `can-i-sandbox` runs can-i under the OpenShell supervisor.
+The client creates the sandbox through the gateway, forwards the dashboard to a Service
+(`svc/can-i`, NodePort by default: open `http://<node-ip>:<nodePort>`), and deletes the
+sandbox when you uninstall. It also works as your CLI:
 ```bash
-kubectl exec -it deploy/can-i -- openshell sandbox connect can-i   # then: can-i tui --stage
-kubectl exec deploy/can-i -- openshell policy get can-i --full
+kubectl exec -it deploy/can-i-client -- openshell sandbox connect can-i-sandbox   # then: can-i tui --stage
+kubectl exec deploy/can-i-client -- openshell policy get can-i-sandbox --full
 ```
