@@ -232,7 +232,7 @@ def test_fix_flags_baseline_denials():
 def test_fix_for_ping_explains_icmp_cannot_be_granted():
     from cani.policy import fix_for_check
 
-    check = Check(id="p", name="ping", category="network", command="ping -c1 -W2 one.one.one.one")
+    check = Check(id="p", name="ping", category="network", command="ping -c1 -W2 1.1.1.1")
     fix = fix_for_check(check, "can-i")
     assert fix["command"] is None
     assert "No OpenShell policy can grant ping" in fix["note"]

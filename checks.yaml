@@ -23,12 +23,14 @@ checks:
     description: Name resolution via NSS/DNS.
     expect: allowed
 
-  # ping and curl to the same host: a policy update can grant the HTTPS
-  # connection, but nothing in an OpenShell policy can grant ICMP.
+  # ping and curl to Cloudflare's 1.1.1.1: a policy update can grant the HTTPS
+  # connection, but nothing in an OpenShell policy can grant ICMP. ping uses the
+  # bare IP so DNS plays no part in its result; curl uses the hostname because
+  # OpenShell egress rules name hosts and can't grant a raw IP.
   - id: net-raw-socket-ping
-    name: Ping one.one.one.one (ICMP)
+    name: Ping 1.1.1.1 (ICMP)
     category: network
-    command: ping -c1 -W2 one.one.one.one
+    command: ping -c1 -W2 1.1.1.1
     description: ICMP needs CAP_NET_RAW or a ping socket; OpenShell only proxies TCP, so no policy grants it.
     expect: denied
 
@@ -36,7 +38,7 @@ checks:
     name: HTTPS to one.one.one.one (curl)
     category: network
     command: curl -fsS --max-time 3 -o /dev/null https://one.one.one.one
-    description: Same host as the ping check, over TCP. Denied until a policy grants it.
+    description: 1.1.1.1 by its hostname, over TCP. Denied until a policy grants it.
 
   - id: net-http-metadata
     name: Cloud metadata endpoint
