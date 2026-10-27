@@ -124,3 +124,12 @@ async def test_api_fix_for_network_check(client, monkeypatch):
 async def test_api_fix_unknown_check(client):
     resp = await client.get("/api/fix/nope")
     assert resp.status_code == 404
+
+
+def test_sandbox_name_comes_from_the_openshell_hostname(monkeypatch):
+    from cani import server
+
+    monkeypatch.setattr(server.socket, "gethostname", lambda: "default--can-i-sandbox")
+    assert server._sandbox_name() == "can-i-sandbox"
+    monkeypatch.setattr(server.socket, "gethostname", lambda: "laptop")
+    assert server._sandbox_name() == "can-i"

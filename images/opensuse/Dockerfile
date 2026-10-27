@@ -19,8 +19,8 @@ LABEL org.opencontainers.image.title="can-i (openSUSE Leap 16.0)" \
       org.opencontainers.image.description="Security capability inspector and sandbox demo dashboard (TUI + Web)" \
       org.opencontainers.image.source="https://github.com/wiredquill/can-i"
 
-# curl/getent/unshare back the default probes; ping, nmap and sudo stay absent
-RUN zypper -n install --no-recommends python313 curl util-linux shadow && zypper -n clean -a
+# curl/getent/unshare/ping/nmap back the default probes
+RUN zypper -n install --no-recommends python313 curl util-linux shadow iputils nmap && zypper -n clean -a
 COPY --from=builder /opt/can-i /opt/can-i
 RUN ln -s /opt/can-i/bin/can-i /usr/local/bin/can-i
 COPY checks.yaml /etc/can-i/checks.yaml

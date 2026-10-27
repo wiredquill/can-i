@@ -23,34 +23,51 @@ checks:
     description: Name resolution via NSS/DNS.
     expect: allowed
 
+  # ping and curl to the same host: a policy update can grant the HTTPS
+  # connection, but nothing in an OpenShell policy can grant ICMP.
   - id: net-raw-socket-ping
-    name: Raw ICMP socket (ping)
+    name: Ping one.one.one.one (ICMP)
     category: network
-    command: ping -c1 -W2 1.1.1.1
-    description: Requires CAP_NET_RAW; dropped in most sandboxes.
+    command: ping -c1 -W2 one.one.one.one
+    description: ICMP needs CAP_NET_RAW or a ping socket; OpenShell only proxies TCP, so no policy grants it.
+    expect: denied
+
+  - id: net-https-cloudflare
+    name: HTTPS to one.one.one.one (curl)
+    category: network
+    command: curl -fsS --max-time 3 -o /dev/null https://one.one.one.one
+    description: Same host as the ping check, over TCP. Denied until a policy grants it.
 
   - id: net-http-metadata
     name: Cloud metadata endpoint
     category: network
     timeout: 3
     command: curl -fsS --max-time 2 -o /dev/null http://169.254.169.254/
-    description: Link-local metadata service; should be denied in sandboxes.
+    description: Link-local metadata service. An OpenShell hard limit; no policy can grant a raw IP.
     expect: denied
+
+  # nmap to a host curl may already reach: egress rules name the binaries
+  # allowed to use them, so nmap is denied until it is added to the rule.
+  - id: net-nmap-suse
+    name: Port scan suse.com:443 (nmap)
+    category: network
+    timeout: 8
+    command: sh -c 'nmap -sT -Pn --system-dns -p443 suse.com | grep -q "443/tcp open"'
+    description: Same destination as the curl check, different binary.
 
   # ---- Filesystem ----------------------------------------------------------
   - id: fs-read-shadow
     name: Read /etc/shadow
     category: filesystem
     command: head -c1 /etc/shadow
-    description: Sensitive credential file; denied for unprivileged users.
+    description: Denied by file permissions with or without a sandbox (the control).
     expect: denied
 
-  - id: fs-write-etc
-    name: Write to /etc
+  - id: fs-write-var-tmp
+    name: Write to /var/tmp
     category: filesystem
-    command: touch /etc/.can-i-probe
-    description: System config write; denied read-only-rootfs / unprivileged.
-    expect: denied
+    command: sh -c 'touch /var/tmp/.can-i-probe && rm -f /var/tmp/.can-i-probe'
+    description: World-writable, but not in the sandbox's read_write paths, so Landlock denies it.
 
   - id: fs-write-tmp
     name: Write to /tmp
@@ -65,13 +82,6 @@ checks:
     command: sh -c 'printf "#!/bin/sh\nexit 0\n" > /tmp/.can-i-x && chmod +x /tmp/.can-i-x && /tmp/.can-i-x; rc=$?; rm -f /tmp/.can-i-x; exit $rc'
     description: Denied when /tmp is mounted noexec.
     expect: allowed
-
-  - id: fs-read-proc-environ
-    name: Read /proc/1/environ
-    category: filesystem
-    command: head -c1 /proc/1/environ
-    description: Init process environment; denied by hidepid/privilege drop.
-    expect: denied
 
   # ---- Processes & binaries ------------------------------------------------
   - id: proc-spawn-sh
@@ -88,24 +98,10 @@ checks:
     description: Network-capable binary execution.
     expect: allowed
 
-  - id: proc-spawn-nmap
-    name: Spawn nmap (scanner)
-    category: process
-    command: nmap --version
-    description: Typically absent or blocked in sandboxes.
-    expect: denied
-
   - id: proc-privesc-unshare
     name: Namespace creation (unshare)
     category: process
     timeout: 3
     command: unshare --user --map-root-user true
-    description: User-namespace creation; denied when unprivileged userns is off.
-
-  - id: proc-privesc-sudo
-    name: Privilege escalation (sudo -n)
-    category: process
-    timeout: 3
-    command: sudo -n true
-    description: Non-interactive sudo; denied without credentials/rights.
+    description: User-namespace creation. An OpenShell hard limit; seccomp blocks it in every sandbox.
     expect: denied

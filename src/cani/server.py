@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -14,6 +15,12 @@ from .config import ConfigError
 from .state import ProbeState
 
 WEB_DIR = Path(__file__).parent / "web"
+
+
+def _sandbox_name() -> str:
+    """This sandbox's OpenShell name: its hostname is <workspace>--<name>."""
+    host = socket.gethostname()
+    return host.split("--", 1)[1] if "--" in host else "can-i"
 
 
 def create_app(config_path: str | Path) -> FastAPI:
@@ -46,6 +53,8 @@ def create_app(config_path: str | Path) -> FastAPI:
             state.update_config(text)
         except ConfigError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"could not save checks.yaml: {exc}") from exc
         await state._broadcast({"type": "config"})
         return text
 
@@ -78,7 +87,7 @@ def create_app(config_path: str | Path) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"no check {check_id!r}")
         result = state.results.get(check_id)
         kind = result.blocker.kind if result and result.blocker else None
-        sandbox = os.environ.get("CANI_SANDBOX_NAME", "can-i")
+        sandbox = os.environ.get("CANI_SANDBOX_NAME") or _sandbox_name()
         return {"sandbox": sandbox, **fix_for_check(check, sandbox, kind)}
 
     @app.get("/api/events")

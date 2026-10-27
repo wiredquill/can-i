@@ -11,6 +11,7 @@ omitted — in OpenShell, absence from the allowlists IS the denial.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import shlex
 import shutil
@@ -171,12 +172,46 @@ def _binary_path(token: str) -> str:
     return shutil.which(token) or f"/usr/bin/{token}"
 
 
-def _first_token(command: str) -> str:
+def _tokens(command: str) -> list[str]:
+    """The command's argv, looking through a `sh -c '...'` wrapper."""
     try:
         tokens = shlex.split(command)
     except ValueError:
-        return ""
+        return []
+    if len(tokens) >= 3 and tokens[0] in ("sh", "bash", "/bin/sh", "/bin/bash") and tokens[1] == "-c":
+        return _tokens(tokens[2].split("|")[0].split("&&")[0])
+    return tokens
+
+
+def _first_token(command: str) -> str:
+    tokens = _tokens(command)
     return tokens[0] if tokens else ""
+
+
+def _nmap_endpoints(command: str) -> list[dict]:
+    """host:port pairs an `nmap -p<ports> <host>` probe connects to."""
+    tokens = _tokens(command)
+    if not tokens or tokens[0].rsplit("/", 1)[-1] != "nmap":
+        return []
+    ports: list[int] = []
+    hosts: list[str] = []
+    args = iter(tokens[1:])
+    for t in args:
+        if t == "-p":
+            t = "-p" + next(args, "")
+        if t.startswith("-p"):
+            ports += [int(p) for p in t[2:].split(",") if p.isdigit()]
+        elif not t.startswith("-"):
+            hosts.append(t)
+    return [{"host": h, "port": p} for h in hosts for p in ports]
+
+
+def _is_ip(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 def checks_to_policy(config: Config) -> str:
@@ -206,6 +241,9 @@ def checks_to_policy(config: Config) -> str:
                 endpoint: dict = {"host": parsed.hostname}
                 port = parsed.port or (443 if parsed.scheme == "https" else 80)
                 endpoint["port"] = port
+                if endpoint not in endpoints:
+                    endpoints.append(endpoint)
+            for endpoint in _nmap_endpoints(check.command):
                 if endpoint not in endpoints:
                     endpoints.append(endpoint)
             token = _first_token(check.command)
@@ -277,6 +315,10 @@ def fix_for_check(check: Check, sandbox: str, blocker_kind: str | None = None) -
     else:
         note = ""
 
+    limit = _hard_limit(check, policy)
+    if limit:
+        return {"command": None, "yaml": None, "live": False, "limit": True, "note": note or limit}
+
     if not has_grant:
         return {
             "command": None,
@@ -315,6 +357,28 @@ def fix_for_check(check: Check, sandbox: str, blocker_kind: str | None = None) -
         ),
         "yaml": fragment,
         "live": False,
-        "note": note or ("Filesystem policy is fixed when the sandbox is created — add the fragment "
-                         "to your policy file and recreate the sandbox."),
+        "note": note or ("Filesystem policy is fixed when the sandbox is created. With the can-i app, "
+                         "add the paths to Extra read-write paths (or Extra read-only paths) in its form "
+                         "and upgrade, which recreates the sandbox. Otherwise merge the fragment into your "
+                         "policy file and recreate the sandbox as shown."),
     }
+
+
+def _hard_limit(check: Check, policy: dict) -> str | None:
+    """Why no OpenShell policy can grant this check, or None if one can."""
+    token = _first_token(check.command).rsplit("/", 1)[-1]
+    if token in ("ping", "ping6"):
+        return ("No OpenShell policy can grant ping. The sandbox has no CAP_NET_RAW and its supervisor "
+                "only proxies TCP, so ICMP never leaves it. To show a grant, use curl to the same host: "
+                "one policy update flips that check.")
+    if token == "unshare":
+        return ("No OpenShell policy can grant this. Every OpenShell sandbox runs under a seccomp filter "
+                "that blocks namespace creation, so an agent can't build its own container to escape.")
+    rule = (policy.get("network_policies") or {}).get(FIX_RULE_NAME) or {}
+    ips = [ep["host"] for ep in rule.get("endpoints", []) if _is_ip(ep["host"])]
+    if ips:
+        meta = any(ipaddress.ip_address(h).is_link_local for h in ips)
+        return ("No OpenShell policy can grant this. Egress rules name hosts, not raw IP addresses"
+                + (", and the link-local cloud metadata service stays blocked in every sandbox" if meta else "")
+                + ". Use a hostname to show a grant.")
+    return None

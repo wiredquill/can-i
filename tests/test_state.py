@@ -83,3 +83,29 @@ async def test_system_info_in_snapshot(state):
     snap = state.snapshot()
     assert "system" in snap
     assert snap["system"]["hostname"]
+
+
+async def test_update_config_resets_changed_checks(state):
+    await state.run_now()
+    state.update_config(YAML.replace("command: 'false'", "command: 'exit 3'"))
+    assert state.results["blocked"].command == "exit 3"
+    assert state.results["blocked"].status == Status.RUNNING
+    assert state.results["ok"].status == Status.ALLOWED  # unchanged check keeps its result
+
+
+async def test_update_config_falls_back_to_home_when_read_only(tmp_path, monkeypatch):
+    etc = tmp_path / "etc"  # like /etc/can-i in the sandbox
+    etc.mkdir()
+    (etc / "checks.yaml").write_text(YAML)
+    state = ProbeState(etc / "checks.yaml")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    etc.chmod(0o555)
+    try:
+        state.update_config(YAML.replace("command: 'false'", "command: 'true'"))
+    finally:
+        etc.chmod(0o755)
+    override = home / ".config" / "can-i" / "checks.yaml"
+    assert state.config_path == override
+    assert "command: 'true'" in override.read_text()
+    assert state.config.checks[1].command == "true"

@@ -16,7 +16,7 @@
 ├─────────┼────────────────────────────┼────────────┼──────┼─────────┤
 │ ALLOWED │ Outbound HTTPS (suse.com)  │ network    │ 0    │ 312 ms  │
 │ DENIED  │ Read /etc/shadow           │ filesystem │ 1    │ 4 ms    │
-│ DENIED  │ Raw ICMP socket (ping)     │ network    │ 2    │ 6 ms    │
+│ DENIED  │ Ping one.one.one.one (ICMP)│ network    │ 2    │ 6 ms    │
 └─────────┴────────────────────────────┴────────────┴──────┴─────────┘
 ```
 
@@ -26,9 +26,9 @@ Probes are defined in [`checks.yaml`](checks.yaml) — one benign shell command 
 
 | Category | Examples |
 |---|---|
-| `network` | outbound HTTPS, DNS lookups, raw-socket ping, cloud metadata endpoint |
-| `filesystem` | read `/etc/shadow`, write `/etc` vs `/tmp`, exec from `noexec` mounts, `/proc/1/environ` |
-| `process` | spawn `sh`/`curl`/`nmap`, `unshare` user namespaces, `sudo -n` |
+| `network` | outbound HTTPS, DNS lookups, ping vs curl to the same host, nmap vs curl to the same host, cloud metadata endpoint |
+| `filesystem` | read `/etc/shadow`, write `/var/tmp` vs `/tmp`, exec from `noexec` mounts |
+| `process` | spawn `sh`/`curl`, `unshare` user namespaces |
 
 ### Who said no? (`blocked_by`)
 
@@ -127,10 +127,15 @@ set: `/tmp` writable, `run_as_user: "10001"` (the image's `cani` user — `sandb
 if the image ships that account), and egress only for `curl → suse.com:443`. It also needs
 `read_only` on `/usr`, `/usr/local`, `/lib`, `/lib64`, `/etc` — the OpenShell baseline paths
 do not cover `/usr/local`, where the image installs can-i.
-Everything the dashboard shows as DENIED (metadata endpoint, `/etc/shadow`, `/etc` writes,
-nmap, sudo, raw ICMP) is denied *by omission* — OpenShell never authorizes
-`169.254.169.254`, and raw ICMP isn't expressible in endpoint rules at all, so those badges
-are red by construction.
+Every denied check falls into one of three groups, and its "How to allow this" panel says which:
+
+| Fix | Checks |
+|---|---|
+| **Live policy update** (network rules hot-reload) | curl to one.one.one.one, nmap to suse.com:443 (adds nmap's binary to the rule curl already uses) |
+| **Recreate the sandbox** (filesystem rules) | write to `/var/tmp`: add it to *Extra read-write paths* in the can-i app |
+| **OpenShell hard limit** (no policy can grant it) | ping (ICMP; no `CAP_NET_RAW`, TCP-only proxy), the `169.254.169.254` metadata endpoint (raw IPs can't be granted), `unshare` (seccomp) |
+
+`/etc/shadow` is the control: unix file permissions deny it with or without a sandbox.
 
 The demo moment — change the network policy live while the dashboard runs (network rules
 hot-reload; filesystem/process changes need a sandbox recreate):
@@ -161,13 +166,10 @@ required; the dashboard on :8477 is served from INSIDE the sandbox. If it still 
 check the host firewall allows :8477 and that the web workload is up
 (`openshell sandbox connect can-i`, then `curl -s localhost:8000 | head`).
 
-Verified on OpenShell v0.1.5 (docker driver): `can-i run` in the sandbox reports
-**12/12 expectations met** — suse.com/DNS and /tmp allowed; metadata denied (OpenShell egress);
-unshare denied (seccomp: filter). /etc/shadow, /etc writes and /proc/1/environ are denied too,
-but by unix file permissions (the workload runs as uid 10001) before Landlock is consulted, and
-ping/nmap/sudo are simply not installed in the image — the "Blocked by" column shows this.
-To see Landlock itself refuse, probe a path the mode bits allow but the policy omits
-(e.g. `ls /var/lib`, `touch /var/tmp/x`).
+On OpenShell v0.1.5: suse.com, DNS and `/tmp` are allowed; the metadata endpoint is denied by
+OpenShell egress and `unshare` by seccomp. `/etc/shadow` is denied by unix file permissions
+(the workload runs as uid 10001) before Landlock is consulted; the "Blocked by" column shows
+which layer said no. `/var/tmp` is world-writable, so its denial is Landlock's.
 
 ### 4. Kubernetes with Rancher or SUSE AI Factory
 
