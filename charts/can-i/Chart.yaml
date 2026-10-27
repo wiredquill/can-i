@@ -2,7 +2,7 @@ apiVersion: v2
 name: can-i
 description: can-i security capability inspector, run as an OpenShell sandbox workload. Pick the sandbox image (SUSE BCI, openSUSE Leap 16 or NVIDIA Ubuntu) and watch what the OpenShell policy lets an agent do.
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "0.1.0"
 keywords: [openshell, sandbox, security, ai-agents, demo, suse-ai-factory]
 home: https://github.com/wiredquill/can-i
@@ -12,5 +12,5 @@ maintainers:
   - name: WiredQuill
     url: https://github.com/wiredquill
 annotations:
-  catalog.cattle.io/display-name: can-i (OpenShell sandbox)
+  catalog.cattle.io/display-name: OpenShell 3 - can-i sandbox
   catalog.cattle.io/release-name: can-i
