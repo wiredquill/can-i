@@ -12,6 +12,7 @@ omitted — in OpenShell, absence from the allowlists IS the denial.
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 import shlex
 import shutil
@@ -167,9 +168,10 @@ _WRITE_RE = re.compile(r"(?:test\s+-w\s+(?P<w1>/\S+))|(?:touch\s+(?P<w2>/\S+))")
 
 
 def _binary_path(token: str) -> str:
-    if "/" in token:
-        return token
-    return shutil.which(token) or f"/usr/bin/{token}"
+    """The executable's real path: OpenShell matches binaries by the path the
+    kernel reports, after symlinks (python3 -> python3.13)."""
+    path = token if "/" in token else shutil.which(token) or f"/usr/bin/{token}"
+    return os.path.realpath(path)
 
 
 def _tokens(command: str) -> list[str]:
@@ -332,14 +334,16 @@ def fix_for_check(check: Check, sandbox: str, blocker_kind: str | None = None) -
     if "network_policies" in policy:
         rule = policy["network_policies"][FIX_RULE_NAME]
         binary = rule["binaries"][0]["path"]
-        tool = binary.rsplit("/", 1)[-1]
+        # the rule is named after the command (python3), not the versioned
+        # file it resolves to (python3.13)
+        tool = _first_token(check.command).rsplit("/", 1)[-1] or binary.rsplit("/", 1)[-1]
         # Each binary gets its own rule, never the chart's can-i-egress: adding
         # an endpoint to a rule changes the access of every binary already in
         # it, which OpenShell refuses unless they are all declared.
         rule_name = f"can-i-{_slug(tool)}"
         # curl's probes are GETs, so its endpoints get read-only REST. Other
-        # binaries get no HTTP inspection: nmap sends no HTTP, and git
-        # fetches with POST, which read-only would block.
+        # binaries get no HTTP inspection: nmap sends no HTTP, and package
+        # tools may need more than read-only methods.
         rest = ":read-only:rest:enforce" if tool == "curl" else ""
         lines = [
             f"openshell policy update {sb} \\\n"

@@ -20,6 +20,7 @@ set -euo pipefail
 : "${DELETE_ON_EXIT:=true}"
 : "${TARGET_PORT:=8000}"
 : "${FORWARD_PORT:=8477}"
+: "${CANI_SUSE_PYPI_URL:=}"
 
 log() { printf '%s can-i-client: %s\n' "$(date -u +%FT%TZ)" "$*"; }
 
@@ -51,6 +52,8 @@ else
   args=(--name "$SANDBOX_NAME" --from "$SANDBOX_IMAGE" --policy "$POLICY_FILE"
         --no-auto-providers --no-tty --detach)
   [ "$SANDBOX_GPU" = true ] && args+=(--gpu)
+  # shows the SUSE PyPI check (checks.yaml fills ${CANI_SUSE_PYPI_URL})
+  [ -n "$CANI_SUSE_PYPI_URL" ] && args+=(--env "CANI_SUSE_PYPI_URL=$CANI_SUSE_PYPI_URL")
   log "creating sandbox $SANDBOX_NAME from $SANDBOX_IMAGE"
   openshell sandbox create "${args[@]}" -- can-i web --host 127.0.0.1 --port "$TARGET_PORT"
 fi

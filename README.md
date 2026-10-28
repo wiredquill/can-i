@@ -26,7 +26,7 @@ Probes are defined in [`checks.yaml`](checks.yaml) — one benign shell command 
 
 | Category | Examples |
 |---|---|
-| `network` | outbound HTTPS, DNS lookups, an unlisted host (curl), nmap vs curl to the same host, git to github.com |
+| `network` | outbound HTTPS, DNS lookups, an unlisted host (curl), nmap vs curl to the same host, python to upstream PyPI and SUSE's index |
 | `filesystem` | read `/etc/shadow`, write `/var/tmp` vs `/tmp`, exec from `noexec` mounts |
 | `process` | spawn `sh`/`curl`, `unshare` user namespaces |
 
@@ -131,7 +131,7 @@ Every denied check falls into one of three groups, and its "How to allow this" p
 
 | Fix | Checks |
 |---|---|
-| **Live policy update** (network rules hot-reload) | curl to one.one.one.one; nmap to suse.com:443 and git to github.com:443, each in its own `can-i-<binary>` rule (adding them to curl's rule would change curl's access too, which OpenShell refuses) |
+| **Live policy update** (network rules hot-reload) | curl to one.one.one.one; nmap to suse.com:443 and python to the PyPI indexes, each in its own `can-i-<binary>` rule (adding them to curl's rule would change curl's access too, which OpenShell refuses) |
 | **Recreate the sandbox** (filesystem rules) | write to `/var/tmp`: add it to *Extra read-write paths* in the can-i app |
 | **OpenShell hard limit** (no policy can grant it) | `unshare` (seccomp). Checks you add for ping or a raw IP address are labeled hard limits too |
 
@@ -148,7 +148,7 @@ openshell policy update can-i \
   --add-endpoint opensuse.org:443:read-only:rest:enforce --wait
 
 # reset: remove the rules the demo added, one per binary
-for r in can-i-curl can-i-nmap can-i-git; do
+for r in can-i-curl can-i-nmap can-i-python3; do
   openshell policy update can-i --remove-rule $r --wait
 done
 
@@ -157,6 +157,22 @@ openshell policy update can-i --remove-rule can-i-egress --wait
 
 # verify what the sandbox actually enforces
 openshell policy get can-i --full
+```
+
+**Upstream PyPI or SUSE's index.** Set *SUSE PyPI index URL* in the can-i app to show a
+second Python check next to "Upstream PyPI". Both start denied. Copy the python path from
+either card's "How to allow this" panel: OpenShell needs the real file, such as
+`/usr/bin/python3.13`, not the `python3` link.
+
+```bash
+# allow upstream PyPI only
+openshell policy update can-i-sandbox --rule-name can-i-python3 \
+  --binary /usr/bin/python3.13 --add-endpoint pypi.org:443 --wait
+
+# switch to SUSE's index: add it, then remove upstream
+openshell policy update can-i-sandbox --rule-name can-i-python3 \
+  --binary /usr/bin/python3.13 --add-endpoint <suse-index-host>:443 --wait
+openshell policy update can-i-sandbox --remove-endpoint pypi.org:443 --wait
 ```
 
 Generate the equivalent policy from any can-i config with
@@ -171,7 +187,7 @@ required; the dashboard on :8477 is served from INSIDE the sandbox. If it still 
 check the host firewall allows :8477 and that the web workload is up
 (`openshell sandbox connect can-i`, then `curl -s localhost:8000 | head`).
 
-On OpenShell v0.1.5: suse.com, DNS and `/tmp` are allowed; one.one.one.one, nmap and git are denied by
+On OpenShell v0.1.5: suse.com, DNS and `/tmp` are allowed; one.one.one.one, nmap and PyPI are denied by
 OpenShell egress until a policy update, and `unshare` by seccomp. `/etc/shadow` is denied by unix file permissions
 (the workload runs as uid 10001) before Landlock is consulted; the "Blocked by" column shows
 which layer said no. `/var/tmp` is world-writable, so its denial is Landlock's.

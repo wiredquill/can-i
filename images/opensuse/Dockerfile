@@ -20,7 +20,7 @@ LABEL org.opencontainers.image.title="can-i (openSUSE Leap 16.0)" \
       org.opencontainers.image.source="https://github.com/wiredquill/can-i"
 
 # curl/getent/unshare/ping back the default probes
-RUN zypper -n install --no-recommends python313 curl util-linux shadow iputils git-core && zypper -n clean -a
+RUN zypper -n install --no-recommends python313 curl util-linux shadow iputils && zypper -n clean -a
 # nmap isn't in Leap 16.0 itself. The network:utilities project builds it for
 # x86_64 only, so on arm64 the nmap check reports "not installed".
 ARG TARGETARCH
