@@ -54,6 +54,8 @@ def test_privileged_actions_denied_in_locked_down_container(image):
     assert by_id["fs-read-shadow"]["status"] == "denied"
     # nmap ships in the image
     assert "not found" not in by_id["net-nmap-suse"]["stderr"]
+    # the unapproved tool runs outside a sandbox: only OpenShell's Landlock denies it
+    assert by_id["proc-run-unapproved-tool"]["status"] == "allowed"
 
     # benign baseline actions still work:
     assert by_id["fs-write-tmp"]["status"] == "allowed"

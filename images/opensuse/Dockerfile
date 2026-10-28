@@ -32,6 +32,8 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
 COPY --from=builder /opt/can-i /opt/can-i
 RUN ln -s /opt/can-i/bin/can-i /usr/local/bin/can-i
 COPY checks.yaml /etc/can-i/checks.yaml
+# a tool outside the sandbox policy's paths, for the unapproved-tool check
+COPY --chmod=755 images/tools/agent-report /srv/can-i-tools/agent-report
 
 RUN useradd --system --uid 10001 --create-home cani
 USER 10001

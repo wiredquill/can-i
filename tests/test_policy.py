@@ -298,3 +298,13 @@ def test_fix_for_var_tmp_write_points_at_the_app_form():
     fix = fix_for_check(check, "can-i")
     assert "- /var/tmp" in fix["yaml"]
     assert "Extra read-write paths" in fix["note"]
+
+
+def test_fix_for_unapproved_tool_grants_its_directory_read_only():
+    from cani.policy import fix_for_check
+
+    check = Check(id="t", name="t", category="process", command="/srv/can-i-tools/agent-report")
+    fix = fix_for_check(check, "can-i")
+    assert "read_only:\n  - /srv/can-i-tools" in fix["yaml"]
+    assert fix["live"] is False
+    assert "Extra read-only paths" in fix["note"]
