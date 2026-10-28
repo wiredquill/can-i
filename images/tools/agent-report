@@ -1,0 +1,5 @@
+#!/bin/sh
+# A stand-in for a tool an agent wants to run. The images install it in
+# /srv/can-i-tools, outside the sandbox policy's paths, so Landlock blocks it
+# until that directory is added to the policy.
+echo "agent-report: ran from $(dirname "$0")"

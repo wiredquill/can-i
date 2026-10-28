@@ -99,6 +99,14 @@ checks:
     description: Network-capable binary execution.
     expect: allowed
 
+  # The image ships this tool in /srv/can-i-tools, which the sandbox policy
+  # doesn't list. Landlock lets programs run only from listed paths.
+  - id: proc-run-unapproved-tool
+    name: Run a tool from /srv/can-i-tools
+    category: process
+    command: /srv/can-i-tools/agent-report
+    description: The tool is outside the policy's paths, so Landlock blocks running it. Add /srv/can-i-tools to Extra read-only paths.
+
   - id: proc-privesc-unshare
     name: Namespace creation (unshare)
     category: process

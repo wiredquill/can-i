@@ -18,6 +18,8 @@ LABEL org.opencontainers.image.title="can-i" \
 RUN zypper -n install --no-recommends iputils nmap && zypper -n clean -a
 COPY --from=builder /install /usr/local
 COPY checks.yaml /etc/can-i/checks.yaml
+# a tool outside the sandbox policy's paths, for the unapproved-tool check
+COPY --chmod=755 images/tools/agent-report /srv/can-i-tools/agent-report
 
 # Run as an unprivileged user — the whole point is probing what is denied.
 RUN useradd --system --uid 10001 --create-home cani

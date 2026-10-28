@@ -28,7 +28,7 @@ Probes are defined in [`checks.yaml`](checks.yaml) — one benign shell command 
 |---|---|
 | `network` | outbound HTTPS, DNS lookups, an unlisted host (curl), nmap vs curl to the same host, python to upstream PyPI and SUSE's index |
 | `filesystem` | read `/etc/shadow`, write `/var/tmp` vs `/tmp`, exec from `noexec` mounts |
-| `process` | spawn `sh`/`curl`, `unshare` user namespaces |
+| `process` | spawn `sh`/`curl`, run a tool from an unapproved directory, `unshare` user namespaces |
 
 ### Who said no? (`blocked_by`)
 
@@ -132,7 +132,7 @@ Every denied check falls into one of three groups, and its "How to allow this" p
 | Fix | Checks |
 |---|---|
 | **Live policy update** (network rules hot-reload) | curl to one.one.one.one; nmap to suse.com:443 and python to the PyPI indexes, each in its own `can-i-<binary>` rule (adding them to curl's rule would change curl's access too, which OpenShell refuses) |
-| **Recreate the sandbox** (filesystem rules) | write to `/var/tmp`: add it to *Extra read-write paths* in the can-i app |
+| **Recreate the sandbox** (filesystem rules) | write to `/var/tmp`: add it to *Extra read-write paths* in the can-i app. Run the tool in `/srv/can-i-tools`: add that directory to *Extra read-only paths* |
 | **OpenShell hard limit** (no policy can grant it) | `unshare` (seccomp). Checks you add for ping or a raw IP address are labeled hard limits too |
 
 `/etc/shadow` is the control: unix file permissions deny it with or without a sandbox.

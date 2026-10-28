@@ -251,6 +251,13 @@ def checks_to_policy(config: Config) -> str:
             token = _first_token(check.command)
             if token:
                 binaries.add(_binary_path(token))
+        elif check.category == "process":
+            # running a program needs read access to its directory
+            token = _first_token(check.command)
+            if token.startswith("/"):
+                target = token.rsplit("/", 1)[0] or "/"
+                if target not in read_only and target not in read_write:
+                    read_only.append(target)
         elif check.category == "filesystem":
             for m in _WRITE_RE.finditer(check.command):
                 path = m.group("w1") or m.group("w2")
