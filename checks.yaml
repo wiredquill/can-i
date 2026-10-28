@@ -29,14 +29,23 @@ checks:
     command: curl -fsS --max-time 3 -o /dev/null https://one.one.one.one
     description: A host the policy doesn't list. Denied until a policy update grants it.
 
-  # An agent fetching code: git is denied until a rule names git and
-  # github.com. The rule also covers git-remote-https, which git starts.
-  - id: net-git-github
-    name: Git ls-remote github.com (git)
+  # Python reading a package index, the way an agent installs packages.
+  # Upstream PyPI and SUSE's index are separate endpoints, so policy updates
+  # can switch the sandbox between them. The SUSE check is shown only when
+  # CANI_SUSE_PYPI_URL is set (the can-i app's "SUSE PyPI index URL").
+  - id: net-pypi-upstream
+    name: Upstream PyPI (python)
     category: network
     timeout: 8
-    command: git ls-remote --exit-code https://github.com/wiredquill/can-i HEAD
-    description: A second program fetching over HTTPS. Denied until a rule grants git.
+    command: python3 -c "import urllib.request as u; u.urlopen('https://pypi.org/simple/pip/', timeout=5)"
+    description: Python reads the pip project page on pypi.org. Denied until a rule grants python.
+
+  - id: net-pypi-suse
+    name: SUSE PyPI (python)
+    category: network
+    timeout: 8
+    command: python3 -c "import urllib.request as u; u.urlopen('${CANI_SUSE_PYPI_URL}', timeout=5)"
+    description: Python reads SUSE's package index. Denied until a rule grants python.
 
   # nmap to a host curl may already reach: egress rules name the binaries
   # allowed to use them, so nmap is denied until it is added to the rule.

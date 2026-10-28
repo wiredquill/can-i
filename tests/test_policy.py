@@ -261,14 +261,19 @@ def test_fix_for_nmap_uses_its_own_rule_and_a_plain_tcp_endpoint():
     assert fix["live"] is True
 
 
-def test_fix_for_git_uses_its_own_rule_without_read_only():
+def test_fix_for_pypi_names_pythons_real_path():
+    import os
+    import shutil
+
     from cani.policy import fix_for_check
 
-    check = Check(id="g", name="git", category="network",
-                  command="git ls-remote --exit-code https://github.com/wiredquill/can-i HEAD")
+    check = Check(id="p", name="pypi", category="network",
+                  command="python3 -c \"import urllib.request as u; u.urlopen('https://pypi.org/simple/pip/', timeout=5)\"")
     fix = fix_for_check(check, "can-i")
-    assert "--rule-name can-i-git " in fix["command"]
-    assert "--add-endpoint github.com:443 --wait" in fix["command"]
+    real = os.path.realpath(shutil.which("python3"))
+    assert f"--binary {real} " in fix["command"]
+    assert "--rule-name can-i-python3 " in fix["command"]
+    assert "--add-endpoint pypi.org:443 --wait" in fix["command"]
 
 
 @pytest.mark.parametrize("command,word", [

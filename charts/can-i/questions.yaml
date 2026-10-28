@@ -67,6 +67,16 @@ questions:
   default: ""
   description: Comma-separated paths added to filesystem_policy.read_write.
 
+- variable: checks.susePypiUrl
+  label: SUSE PyPI index URL
+  group: Checks
+  type: string
+  default: ""
+  description: >-
+    A URL on SUSE's package index for the "SUSE PyPI (python)" check, for example a project page
+    under its /simple/ path. Next to the upstream PyPI check, it lets a demo switch the sandbox
+    between the two indexes with openshell policy update. Leave blank to hide the check.
+
 - variable: gateway.endpoint
   label: OpenShell gateway endpoint
   group: OpenShell gateway

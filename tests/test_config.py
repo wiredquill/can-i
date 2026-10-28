@@ -102,3 +102,26 @@ def test_save_config_rejects_invalid_and_does_not_write(tmp_path):
     with pytest.raises(ConfigError):
         save_config(p, "checks:\n  - id: x\n    category: bogus\n")
     assert p.read_text() == before  # untouched on failure
+
+
+def test_env_refs_fill_commands_and_unset_ones_drop_the_check(monkeypatch):
+    from cani.config import parse_config
+
+    text = """
+version: 1
+checks:
+  - id: a
+    name: always
+    category: network
+    command: curl https://suse.com
+  - id: b
+    name: optional
+    category: network
+    command: curl ${CANI_TEST_URL}
+"""
+    monkeypatch.delenv("CANI_TEST_URL", raising=False)
+    assert [c.id for c in parse_config(text).checks] == ["a"]
+
+    monkeypatch.setenv("CANI_TEST_URL", "https://example.org/simple/")
+    cfg = parse_config(text)
+    assert cfg.checks[1].command == "curl https://example.org/simple/"

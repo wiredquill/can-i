@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Literal
@@ -90,6 +91,31 @@ def _format_validation_error(exc: PydanticValidationError) -> str:
     return "invalid checks.yaml schema:\n" + "\n".join(lines)
 
 
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _expand_env(data: dict) -> None:
+    """Fill ${VAR} in check names and commands from the environment.
+
+    A check that refers to an unset or empty variable is dropped, so optional
+    checks (an index URL set in the app form) appear only when configured.
+    """
+    checks = data.get("checks")
+    if not isinstance(checks, list):
+        return
+    kept = []
+    for check in checks:
+        if isinstance(check, dict):
+            refs = {m for f in ("name", "command") for m in _ENV_REF.findall(str(check.get(f, "")))}
+            if any(not os.environ.get(v) for v in refs):
+                continue
+            for f in ("name", "command"):
+                if isinstance(check.get(f), str):
+                    check[f] = _ENV_REF.sub(lambda m: os.environ[m.group(1)], check[f])
+        kept.append(check)
+    data["checks"] = kept
+
+
 def parse_config(text: str) -> Config:
     """Parse and validate raw YAML text into a Config."""
     try:
@@ -98,6 +124,7 @@ def parse_config(text: str) -> Config:
         raise ConfigError(f"YAML parse error: {exc}") from exc
     if not isinstance(data, dict):
         raise ConfigError("checks.yaml must be a YAML mapping at the top level")
+    _expand_env(data)
     try:
         return Config.model_validate(data)
     except PydanticValidationError as exc:

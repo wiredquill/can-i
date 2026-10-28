@@ -53,6 +53,8 @@ spec:
               value: {{ .Values.sandbox.gpu | quote }}
             - name: RECREATE
               value: {{ .Values.sandbox.recreate | quote }}
+            - name: CANI_SUSE_PYPI_URL
+              value: {{ .Values.checks.susePypiUrl | quote }}
             - name: FORWARD_PORT
               value: "8477"
             # `kubectl exec ... -- openshell ...` uses the registered gateway

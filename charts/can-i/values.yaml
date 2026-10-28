@@ -31,6 +31,11 @@ policy:
   # Must exist in the image; all can-i images ship user cani (10001).
   runAsUser: "10001"
 
+checks:
+  # A package index URL for the "SUSE PyPI (python)" check, e.g. a project
+  # page under its /simple/ path. Blank hides the check.
+  susePypiUrl: ""
+
 gateway:
   # The openshell-gateway chart's Service and client certificate Secret.
   endpoint: https://openshell:8080
