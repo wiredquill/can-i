@@ -99,6 +99,9 @@ The most effective way to show OpenShell enforcement: **launch the can-i contain
 the workload of a child sandbox** with a policy attached. The dashboard then shows, live,
 exactly what that policy allows and denies — no host changes, no container rebuilds.
 
+The host running the sandboxes needs Landlock enabled in its kernel, or no sandbox starts.
+See [Enable Landlock on SLES and openSUSE](docs/landlock/README.md).
+
 ```bash
 # one-time: point the CLI at a gateway
 openshell gateway add http://127.0.0.1:18080 --local --name local
@@ -248,7 +251,8 @@ dial in **Extra certificate names**: the CLI checks the gateway's certificate ag
 Sandboxes are never exposed; you reach them through the gateway.
 
 Changing the image or starting policy in the form recreates the sandbox. The cluster needs
-a CNI that enforces `NetworkPolicy`. If Agent Sandbox was already installed with
+a CNI that enforces `NetworkPolicy`, and every node that runs sandboxes needs Landlock
+enabled ([how](docs/landlock/README.md)). If Agent Sandbox was already installed with
 `kubectl apply`, skip its chart: Helm can't adopt those resources.
 
 ## Usage

@@ -13,6 +13,8 @@ only apply to sandboxes created later. To get a sandbox you can open in a browse
 namespace afterwards.
 
 **Before you install**
+- **Landlock enabled on every node that runs sandboxes**, or no sandbox starts. See
+  [Enable Landlock on SLES and openSUSE](https://github.com/wiredquill/can-i/blob/main/docs/landlock/README.md).
 - **OpenShell 1 - Agent Sandbox controller** on this cluster (once per cluster), or `kubectl apply` of its `sandbox.yaml`.
 - A CNI that enforces `NetworkPolicy` (RKE2's Canal/Calico/Cilium do).
 - Install the sandbox apps (step 3) into this same namespace: they read the
