@@ -22,7 +22,9 @@ spec:
                             image (SUSE BCI, openSUSE Leap 16 or NVIDIA Ubuntu)
                             and serves its dashboard
 
-    Prerequisites on the target cluster: a CNI that enforces NetworkPolicy
+    Prerequisites on the target cluster: Landlock enabled in the kernel of
+    every node that runs sandboxes (docs/landlock/README.md in the can-i repo),
+    a CNI that enforces NetworkPolicy
     (RKE2's Canal/Calico/Cilium do), a default StorageClass for the gateway
     database, and no earlier Agent Sandbox install (kubectl apply of
     sandbox.yaml) that Helm would conflict with.

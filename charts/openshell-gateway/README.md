@@ -40,6 +40,9 @@ RuntimeClass of their own.
 
 ## Before you install
 
+- **Landlock enabled on every node that runs sandboxes.** Without it no sandbox starts.
+  See [Enable Landlock](../../docs/landlock/README.md) for SLES and openSUSE, and how to
+  check each node.
 - **OpenShell 1 - Agent Sandbox controller** on the cluster. The install fails if its CRD
   is missing.
 - A CNI that enforces `NetworkPolicy`. RKE2's Canal, Calico and Cilium all do.

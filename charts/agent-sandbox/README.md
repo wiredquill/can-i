@@ -13,6 +13,9 @@ controller turns each `Sandbox` into a pod.
 
 ## The OpenShell apps
 
+**Every node that runs sandboxes needs Landlock enabled first.** See
+[Enable Landlock](../../docs/landlock/README.md).
+
 Install them in this order. Every app after the first goes into the **same namespace**
 (for example `openshell`): the sandbox apps read the gateway's `openshell-client-tls` Secret
 and call `https://openshell:8080`.
