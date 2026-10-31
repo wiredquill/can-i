@@ -92,6 +92,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"runtime: {sysinfo['container_runtime'] or 'host'}  "
         f"landlock: {landlock}  seccomp: {sysinfo['seccomp']}"
     )
+    console.print(f"[dim]uname -a:[/] {sysinfo['uname']}", highlight=False)
     table = Table(show_lines=False)
     for col in ("Status", "Check", "Category", "Blocked by", "Exit", "Latency", "Detail"):
         table.add_column(col)

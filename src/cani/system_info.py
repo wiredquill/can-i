@@ -28,6 +28,7 @@ SECCOMP_MODES = {0: "disabled", 1: "strict", 2: "filter"}
 class SystemInfo(BaseModel):
     hostname: str
     kernel: str
+    uname: str = ""  # `uname -a`: the kernel this process actually talks to
     uid: int
     user: str
     capabilities: list[str]
@@ -107,6 +108,16 @@ def detect_container(
     return runtime or None
 
 
+def uname_all(uname=os.uname) -> str:
+    """Equivalent of `uname -a`, from the uname(2) syscall.
+
+    Under gVisor or Kata this reports the sandbox's kernel (gVisor's Sentry,
+    the Kata guest VM), not the node's — which is the point of showing it.
+    """
+    u = uname()
+    return " ".join([u.sysname, u.nodename, u.release, u.version, u.machine])
+
+
 def _read(path: str) -> str:
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -148,6 +159,7 @@ def gather() -> SystemInfo:
     return SystemInfo(
         hostname=socket.gethostname(),
         kernel=platform.release(),
+        uname=uname_all(),
         uid=os.getuid(),
         user=pwd.getpwuid(os.getuid()).pw_name,
         capabilities=decode_capabilities(cap_mask),

@@ -304,7 +304,7 @@ checks as a policy document.
 | Endpoint | Description |
 |---|---|
 | `GET /` | dashboard SPA |
-| `GET /api/system` | hostname, kernel, uid/user, effective capabilities, sandbox status |
+| `GET /api/system` | hostname, kernel, `uname -a`, uid/user, effective capabilities, sandbox status |
 | `GET /api/probes` | latest results for every check |
 | `POST /api/run` | trigger a probe run, returns results |
 | `GET /api/config` | raw `checks.yaml` |

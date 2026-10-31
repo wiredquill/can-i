@@ -55,7 +55,7 @@ async def test_get_system_info(client):
     resp = await client.get("/api/system")
     assert resp.status_code == 200
     body = resp.json()
-    for key in ("hostname", "kernel", "uid", "user", "capabilities", "sandboxed"):
+    for key in ("hostname", "kernel", "uname", "uid", "user", "capabilities", "sandboxed"):
         assert key in body
 
 

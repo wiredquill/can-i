@@ -575,6 +575,7 @@ class CanIApp(App):
             ("Sandboxed ", "bold"),
             (str(sysinfo["sandboxed"]), "bold yellow" if sysinfo["sandboxed"] else "green"),
             f"\n Capabilities: {caps or 'none'}",
+            ("\n uname -a ", "bold"), sysinfo.get("uname", ""),
         )
         self.query_one("#ribbon", Static).update(ribbon)
         self._render_score(snap["results"])

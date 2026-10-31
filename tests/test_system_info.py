@@ -10,6 +10,7 @@ from cani.system_info import (
     detect_container,
     gather,
     parse_seccomp_mode,
+    uname_all,
 )
 
 
@@ -61,11 +62,17 @@ def test_detect_container_none_on_bare_host():
     assert detect_container(exists=lambda p: False, environ={}) is None
 
 
+def test_uname_all_joins_fields_like_uname_a():
+    fake = os.uname_result(("Linux", "box", "4.4.0", "#1 SMP Sun Jan 10 15:06:54 PST 2016", "x86_64"))
+    assert uname_all(uname=lambda: fake) == "Linux box 4.4.0 #1 SMP Sun Jan 10 15:06:54 PST 2016 x86_64"
+
+
 def test_gather_matches_reality():
     info = gather()
     assert isinstance(info, SystemInfo)
     assert info.hostname == socket.gethostname()
     assert info.kernel == platform.release()
+    assert platform.release() in info.uname
     assert info.uid == os.getuid()
     assert info.user == pwd.getpwuid(os.getuid()).pw_name
     assert isinstance(info.capabilities, list)
