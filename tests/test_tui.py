@@ -57,6 +57,7 @@ async def test_ribbon_shows_system_summary(state):
         ribbon = str(app.query_one("#ribbon").render())
         assert socket.gethostname() in ribbon
         assert "uid" in ribbon.lower() or "user" in ribbon.lower()
+        assert "uname -a" in ribbon
 
 
 async def test_run_keybinding_updates_statuses(state):
